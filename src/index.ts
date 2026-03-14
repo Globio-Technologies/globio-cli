@@ -4,7 +4,7 @@ import { login } from './auth/login.js';
 import { logout } from './auth/logout.js';
 import { whoami } from './auth/whoami.js';
 import { init } from './commands/init.js';
-import { projectsList, projectsUse } from './commands/projects.js';
+import { projectsCreate, projectsList, projectsUse } from './commands/projects.js';
 import { servicesList } from './commands/services.js';
 import {
   functionsList,
@@ -34,7 +34,11 @@ program
     return '';
   });
 
-program.command('login').description('Log in to your Globio account').action(login);
+program
+  .command('login')
+  .description('Log in to your Globio account')
+  .option('--token', 'Use a personal access token')
+  .action(login);
 program.command('logout').description('Log out').action(logout);
 program.command('whoami').description('Show current account and project').action(whoami);
 
@@ -42,6 +46,7 @@ program.command('init').description('Initialize a Globio project').action(init);
 
 const projects = program.command('projects').description('Manage projects');
 projects.command('list').description('List projects').action(projectsList);
+projects.command('create').description('Create a project').action(projectsCreate);
 projects.command('use <projectId>').description('Set active project').action(projectsUse);
 
 program.command('services').description('List available Globio services').action(servicesList);
@@ -94,8 +99,15 @@ migrate
   .option('--all', 'Migrate all files')
   .action(migrateFirebaseStorage);
 
-if (process.argv.length <= 2) {
-  program.help();
+async function main() {
+  if (process.argv.length <= 2) {
+    program.help();
+  }
+
+  await program.parseAsync();
 }
 
-await program.parseAsync();
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});

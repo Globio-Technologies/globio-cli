@@ -10,6 +10,7 @@ import {
 } from '../lib/banner.js';
 import { promptInit } from '../prompts/init.js';
 import { migrateFirestore, migrateFirebaseStorage } from './migrate.js';
+import { projectsCreate, projectsUse } from './projects.js';
 
 const version = getCliVersion();
 
@@ -17,19 +18,23 @@ export async function init() {
   printBanner(version);
   p.intro(orange('⇒⇒') + '  Initialize your Globio project');
 
-  const values = await promptInit();
+  const cfg = config.get();
+  if (!cfg.projectId) {
+    await projectsCreate();
+  } else {
+    await projectsUse(cfg.projectId);
+  }
 
-  config.set({
-    apiKey: values.apiKey as string,
-    projectId: values.projectId as string,
-  });
+  const values = await promptInit();
+  const activeProjectKey = config.requireProjectApiKey();
+  const activeProjectId = config.requireProject();
 
   if (!existsSync('globio.config.ts')) {
     writeFileSync(
       'globio.config.ts',
-      `import { GlobioClient } from '@globio/sdk';
+      `import { Globio } from '@globio/sdk';
 
-export const globio = new GlobioClient({
+export const globio = new Globio({
   apiKey: process.env.GLOBIO_API_KEY!,
 });
 `
@@ -38,7 +43,7 @@ export const globio = new GlobioClient({
   }
 
   if (!existsSync('.env')) {
-    writeFileSync('.env', `GLOBIO_API_KEY=${values.apiKey}\n`);
+    writeFileSync('.env', `GLOBIO_API_KEY=${activeProjectKey}\n`);
     printSuccess('Created .env');
   }
 
@@ -70,6 +75,7 @@ export const globio = new GlobioClient({
       muted('Next steps:') +
       '\n\n' +
       '  npm install @globio/sdk\n' +
+      `  # active project: ${activeProjectId}\n` +
       '  npx @globio/cli functions create my-first-function'
   );
 }

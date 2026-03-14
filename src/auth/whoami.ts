@@ -3,13 +3,17 @@ import { config } from '../lib/config.js';
 
 export async function whoami() {
   const cfg = config.get();
-  if (!cfg.apiKey) {
+  if (!cfg.pat) {
     console.log(chalk.red('Not logged in.'));
     return;
   }
 
   console.log('');
-  console.log(chalk.cyan('API Key:   ') + cfg.apiKey);
-  console.log(chalk.cyan('Project:   ') + (cfg.projectId ?? 'none'));
+  console.log(chalk.cyan('Account:   ') + (cfg.accountEmail ?? 'unknown'));
+  console.log(chalk.cyan('Name:      ') + (cfg.accountName ?? 'unknown'));
+  console.log(
+    chalk.cyan('Project:   ') +
+      (cfg.projectId ? `${cfg.projectName ?? 'unnamed'} (${cfg.projectId})` : 'none')
+  );
   console.log('');
 }

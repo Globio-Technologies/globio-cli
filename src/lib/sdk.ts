@@ -2,8 +2,7 @@ import { Globio } from '@globio/sdk';
 import { config } from './config.js';
 
 export function getClient(): Globio {
-  const apiKey = config.requireAuth();
-  config.requireProject();
+  const apiKey = config.requireProjectApiKey();
   return new Globio({ apiKey });
 }
 
