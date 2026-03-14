@@ -48,6 +48,7 @@ export async function init(options: { profile?: string } = {}) {
 
 export const globio = new Globio({
   apiKey: process.env.GLOBIO_API_KEY!,
+  projectId: '${activeProjectId}',
 });
 `
     );
