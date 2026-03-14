@@ -27,7 +27,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check npm version
+        id: npm_version
+        run: |
+          CURRENT="$(npm view @globio/cli version 2>/dev/null || true)"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
       - name: Publish to npm
+        if: steps.npm_version.outputs.current != '0.1.0'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
