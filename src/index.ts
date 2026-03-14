@@ -95,7 +95,6 @@ migrate
   .action(migrateFirebaseStorage);
 
 if (process.argv.length <= 2) {
-  printBanner(version);
   program.help();
 }
 
