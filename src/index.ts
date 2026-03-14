@@ -25,7 +25,7 @@ const program = new Command();
 program
   .name('globio')
   .description('The official Globio CLI')
-  .version('0.0.1');
+    .version('0.1.0');
 
 program.command('login').description('Log in to your Globio account').action(login);
 program.command('logout').description('Log out').action(logout);

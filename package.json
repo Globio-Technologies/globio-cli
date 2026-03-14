@@ -1,6 +1,6 @@
 {
   "name": "@globio/cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "The official CLI for Globio — game backend as a service",
   "type": "module",
   "license": "MIT",
