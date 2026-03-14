@@ -1,0 +1,179 @@
+import * as p from '@clack/prompts';
+import chalk from 'chalk';
+import { basename } from 'path';
+import { initFirebase } from '../lib/firebase.js';
+import { createProgressBar } from '../lib/progress.js';
+import { getClient } from '../lib/sdk.js';
+
+interface MigrateFirestoreOptions {
+  from: string;
+  collection?: string;
+  all?: boolean;
+}
+
+interface MigrateStorageOptions {
+  from: string;
+  bucket: string;
+  folder?: string;
+  all?: boolean;
+}
+
+export async function migrateFirestore(options: MigrateFirestoreOptions) {
+  console.log('');
+  p.intro(chalk.bgYellow(chalk.black(' Globio Migration — Firestore ')));
+
+  const { firestore } = await initFirebase(options.from);
+  const client = getClient();
+
+  let collections: string[] = [];
+
+  if (options.all) {
+    const snapshot = await firestore.listCollections();
+    collections = snapshot.map((collection) => collection.id);
+    console.log(
+      chalk.cyan(
+        `Found ${collections.length} collections: ${collections.join(', ')}`
+      )
+    );
+  } else if (options.collection) {
+    collections = [options.collection];
+  } else {
+    console.log(chalk.red('Specify --collection <name> or --all'));
+    process.exit(1);
+  }
+
+  const results: Record<
+    string,
+    { success: number; failed: number; failedIds: string[] }
+  > = {};
+
+  for (const collectionId of collections) {
+    console.log('');
+    console.log(chalk.cyan(`Migrating collection: ${collectionId}`));
+
+    const countSnap = await firestore.collection(collectionId).count().get();
+    const total = countSnap.data().count;
+
+    const bar = createProgressBar(collectionId);
+    bar.start(total, 0);
+
+    results[collectionId] = {
+      success: 0,
+      failed: 0,
+      failedIds: [],
+    };
+
+    let lastDoc: unknown = null;
+    let processed = 0;
+
+    while (processed < total) {
+      let query = firestore.collection(collectionId).limit(100);
+
+      if (lastDoc) {
+        query = query.startAfter(lastDoc as never);
+      }
+
+      const snapshot = await query.get();
+      if (snapshot.empty) {
+        break;
+      }
+
+      for (const doc of snapshot.docs) {
+        try {
+          const result = await client.doc.set(collectionId, doc.id, doc.data());
+          if (!result.success) {
+            throw new Error(result.error.message);
+          }
+          results[collectionId].success++;
+        } catch {
+          results[collectionId].failed++;
+          results[collectionId].failedIds.push(doc.id);
+        }
+        processed++;
+        bar.update(processed);
+      }
+
+      lastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
+    }
+
+    bar.stop();
+
+    console.log(
+      chalk.green(`  ✓ ${results[collectionId].success} documents migrated`)
+    );
+    if (results[collectionId].failed > 0) {
+      console.log(chalk.red(`  ✗ ${results[collectionId].failed} failed`));
+      console.log(
+        chalk.gray(
+          '  Failed IDs: ' +
+            results[collectionId].failedIds.slice(0, 10).join(', ') +
+            (results[collectionId].failedIds.length > 10 ? '...' : '')
+        )
+      );
+    }
+  }
+
+  console.log('');
+  p.outro(chalk.green('Firestore migration complete.'));
+  console.log(
+    chalk.gray(
+      'Your Firebase data is intact. Delete it manually when ready.'
+    )
+  );
+}
+
+export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
+  console.log('');
+  p.intro(chalk.bgYellow(chalk.black(' Globio Migration — Storage ')));
+
+  const { storage } = await initFirebase(options.from);
+  const client = getClient();
+
+  const bucketName = options.bucket.replace(/^gs:\/\//, '');
+  const bucket = storage.bucket(bucketName);
+  const prefix = options.folder ? options.folder.replace(/^\//, '') : '';
+
+  const [files] = await bucket.getFiles(prefix ? { prefix } : {});
+
+  console.log(chalk.cyan(`Found ${files.length} files to migrate`));
+
+  const bar = createProgressBar('Storage');
+  bar.start(files.length, 0);
+
+  let success = 0;
+  let failed = 0;
+
+  for (const file of files) {
+    try {
+      const [buffer] = await file.download();
+      const uploadFile = new File(
+        [new Uint8Array(buffer)],
+        basename(file.name) || file.name
+      );
+      const result = await client.vault.uploadFile(uploadFile, {
+        metadata: {
+          original_path: file.name,
+        },
+      });
+
+      if (!result.success) {
+        throw new Error(result.error.message);
+      }
+
+      success++;
+    } catch {
+      failed++;
+    }
+    bar.increment();
+  }
+
+  bar.stop();
+
+  console.log('');
+  console.log(chalk.green(`  ✓ ${success} files migrated`));
+  if (failed > 0) {
+    console.log(chalk.red(`  ✗ ${failed} failed`));
+  }
+
+  p.outro(chalk.green('Storage migration complete.'));
+}
