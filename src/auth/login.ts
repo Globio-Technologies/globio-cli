@@ -26,6 +26,26 @@ async function savePat(token: string) {
   return account;
 }
 
+function warnOnDuplicateAccount(accountEmail: string, targetProfileName: string) {
+  const allProfiles = config.listProfiles();
+  const duplicate = allProfiles.find((name) => {
+    const profile = config.getProfile(name);
+    return profile?.account_email === accountEmail && name !== targetProfileName;
+  });
+
+  if (!duplicate) return;
+
+  console.log('');
+  console.log(
+    chalk.yellow('  ⚠  ') +
+      chalk.white(accountEmail) +
+      chalk.gray(' is already logged in under profile ') +
+      orange(`"${duplicate}"`) +
+      chalk.gray('.')
+  );
+  console.log('');
+}
+
 async function runTokenLogin(profileName: string) {
   const hadProfiles = config.listProfiles().length > 0;
   const token = await p.text({
@@ -47,6 +67,7 @@ async function runTokenLogin(profileName: string) {
   spinner.start('Validating personal access token...');
   try {
     const account = await savePat(token);
+    warnOnDuplicateAccount(account.email, profileName);
     config.setProfile(profileName, {
       pat: token,
       account_email: account.email,
@@ -104,6 +125,7 @@ async function runBrowserLogin(profileName: string) {
           body: { code: status.code },
         });
 
+        warnOnDuplicateAccount(exchange.account.email, profileName);
         config.setProfile(profileName, {
           pat: exchange.token,
           account_email: exchange.account.email,

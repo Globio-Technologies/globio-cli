@@ -6,6 +6,7 @@ import { useProfile } from './auth/useProfile.js';
 import { whoami } from './auth/whoami.js';
 import { init } from './commands/init.js';
 import { projectsCreate, projectsList, projectsUse } from './commands/projects.js';
+import { profilesList } from './commands/profiles.js';
 import { servicesList } from './commands/services.js';
 import {
   functionsList,
@@ -61,6 +62,16 @@ program.command('whoami').description('Show current account and project').option
 program.command('use <profile>').description('Switch active profile').action(useProfile);
 
 program.command('init').description('Initialize a Globio project').option('--profile <name>', 'Use a specific profile').action(init);
+
+const profiles = program
+  .command('profiles')
+  .description('Manage login profiles')
+  .action(profilesList);
+
+profiles
+  .command('list')
+  .description('List all profiles')
+  .action(profilesList);
 
 const projects = program.command('projects').description('Manage projects');
 projects.command('list').description('List projects').option('--profile <name>', 'Use a specific profile').action(projectsList);
