@@ -1,6 +1,6 @@
 {
   "name": "@globio/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The official CLI for Globio — game backend as a service",
   "type": "module",
   "license": "MIT",
@@ -19,7 +19,9 @@
     "cli-progress": "^3.12.0",
     "commander": "^12.0.0",
     "conf": "^13.0.0",
+    "figlet": "^1.11.0",
     "firebase-admin": "^12.0.0",
+    "gradient-string": "^3.0.0",
     "ora": "^8.0.0"
   },
   "devDependencies": {

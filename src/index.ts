@@ -19,13 +19,20 @@ import {
   migrateFirestore,
   migrateFirebaseStorage,
 } from './commands/migrate.js';
+import { getCliVersion, printBanner } from './lib/banner.js';
+
+const version = getCliVersion();
 
 const program = new Command();
 
 program
   .name('globio')
   .description('The official Globio CLI')
-    .version('0.1.0');
+  .version(version)
+  .addHelpText('beforeAll', () => {
+    printBanner(version);
+    return '';
+  });
 
 program.command('login').description('Log in to your Globio account').action(login);
 program.command('logout').description('Log out').action(logout);
@@ -86,5 +93,10 @@ migrate
   .option('--folder <path>', 'Migrate a specific folder')
   .option('--all', 'Migrate all files')
   .action(migrateFirebaseStorage);
+
+if (process.argv.length <= 2) {
+  printBanner(version);
+  program.help();
+}
 
 await program.parseAsync();

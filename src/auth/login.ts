@@ -1,12 +1,13 @@
 import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { config } from '../lib/config.js';
+import { getCliVersion, muted, orange, printBanner } from '../lib/banner.js';
 
 const DEFAULT_BASE_URL = 'https://api.globio.stanlink.online';
+const version = getCliVersion();
 
 export async function login() {
-  console.log('');
-  p.intro(chalk.bgCyan(chalk.black(' Globio CLI ')));
+  printBanner(version);
 
   const values = await p.group(
     {
@@ -54,8 +55,14 @@ export async function login() {
 
     spinner.stop('Credentials validated.');
     p.outro(
-      chalk.green('Logged in. Active project: ') +
-        chalk.cyan(values.projectId as string)
+      '  Logged in.\n\n' +
+        '  ' +
+        muted('API Key:  ') +
+        orange(values.apiKey as string) +
+        '\n' +
+        '  ' +
+        muted('Project:  ') +
+        orange(values.projectId as string)
     );
   } catch {
     spinner.stop('');

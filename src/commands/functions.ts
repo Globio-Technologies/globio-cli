@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import type { CodeFunction, CodeInvocation } from '@globio/sdk';
 import ora from 'ora';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { gold, muted, orange } from '../lib/banner.js';
 import { getClient } from '../lib/sdk.js';
 
 export async function functionsList() {
@@ -17,16 +18,12 @@ export async function functionsList() {
 
   console.log('');
   result.data.forEach((fn: CodeFunction) => {
-    const status = fn.active
-      ? chalk.green('● active')
-      : chalk.gray('○ inactive');
+    const status = fn.active ? '\x1b[32m●\x1b[0m' : '\x1b[2m○\x1b[0m';
     const type =
-      fn.type === 'hook'
-        ? chalk.yellow('[hook]')
-        : chalk.cyan('[function]');
-    console.log(`  ${status}  ${type}  ${chalk.white(fn.slug)}`);
-    if (fn.type === 'hook') {
-      console.log(chalk.gray(`           trigger: ${fn.trigger_event}`));
+      fn.type === 'hook' ? gold('[hook]') : orange('[function]');
+    console.log('  ' + status + '  ' + type + '  ' + fn.slug);
+    if (fn.type === 'hook' && fn.trigger_event) {
+      console.log(muted('           trigger: ' + fn.trigger_event));
     }
   });
   console.log('');
@@ -130,9 +127,9 @@ export async function functionsInvoke(
   }
 
   console.log('');
-  console.log(chalk.cyan('Result:'));
+  console.log(orange('Result:'));
   console.log(JSON.stringify(result.data.result, null, 2));
-  console.log(chalk.gray(`\nDuration: ${result.data.duration_ms}ms`));
+  console.log(muted(`\nDuration: ${result.data.duration_ms}ms`));
 }
 
 export async function functionsLogs(
@@ -152,7 +149,9 @@ export async function functionsLogs(
 
   console.log('');
   result.data.forEach((inv: CodeInvocation) => {
-    const status = inv.success ? chalk.green('✓') : chalk.red('✗');
+    const status = inv.success
+      ? '\x1b[38;2;244;140;6m✓\x1b[0m'
+      : '\x1b[31m✗\x1b[0m';
     const date = new Date(inv.invoked_at * 1000)
       .toISOString()
       .replace('T', ' ')

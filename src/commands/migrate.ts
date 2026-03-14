@@ -1,9 +1,18 @@
 import * as p from '@clack/prompts';
 import chalk from 'chalk';
 import { basename } from 'path';
+import {
+  getCliVersion,
+  gold,
+  muted,
+  orange,
+  printBanner,
+} from '../lib/banner.js';
 import { initFirebase } from '../lib/firebase.js';
 import { createProgressBar } from '../lib/progress.js';
 import { getClient } from '../lib/sdk.js';
+
+const version = getCliVersion();
 
 interface MigrateFirestoreOptions {
   from: string;
@@ -19,8 +28,8 @@ interface MigrateStorageOptions {
 }
 
 export async function migrateFirestore(options: MigrateFirestoreOptions) {
-  console.log('');
-  p.intro(chalk.bgYellow(chalk.black(' Globio Migration — Firestore ')));
+  printBanner(version);
+  p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
 
   const { firestore } = await initFirebase(options.from);
   const client = getClient();
@@ -49,7 +58,7 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
 
   for (const collectionId of collections) {
     console.log('');
-    console.log(chalk.cyan(`Migrating collection: ${collectionId}`));
+    console.log('  ' + orange(collectionId));
 
     const countSnap = await firestore.collection(collectionId).count().get();
     const total = countSnap.data().count;
@@ -114,17 +123,20 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
   }
 
   console.log('');
-  p.outro(chalk.green('Firestore migration complete.'));
-  console.log(
-    chalk.gray(
-      'Your Firebase data is intact. Delete it manually when ready.'
-    )
+  p.outro(
+    orange('✓') +
+      '  Migration complete.\n\n' +
+      '  ' +
+      muted('Your Firebase data is intact.') +
+      '\n' +
+      '  ' +
+      muted('Delete it manually when ready.')
   );
 }
 
 export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
-  console.log('');
-  p.intro(chalk.bgYellow(chalk.black(' Globio Migration — Storage ')));
+  printBanner(version);
+  p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
 
   const { storage } = await initFirebase(options.from);
   const client = getClient();
@@ -175,5 +187,13 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
     console.log(chalk.red(`  ✗ ${failed} failed`));
   }
 
-  p.outro(chalk.green('Storage migration complete.'));
+  p.outro(
+    orange('✓') +
+      '  Migration complete.\n\n' +
+      '  ' +
+      muted('Your Firebase data is intact.') +
+      '\n' +
+      '  ' +
+      muted('Delete it manually when ready.')
+  );
 }
