@@ -27,6 +27,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Read package version
+        id: package_version
+        run: |
+          VERSION="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Check npm version
         id: npm_version
         run: |
@@ -34,7 +40,7 @@ jobs:
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
-        if: steps.npm_version.outputs.current != '0.1.0'
+        if: steps.npm_version.outputs.current != steps.package_version.outputs.version
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -42,7 +48,12 @@ jobs:
       - name: Setup Deno for JSR
         uses: denoland/setup-deno@v1
 
+      - name: Check JSR version
+        id: jsr_version
+        run: |
+          CURRENT="$(curl -fsS https://jsr.io/api/scopes/globio/packages/cli | node -e "let data=''; process.stdin.on('data', d => data += d); process.stdin.on('end', () => { try { const json = JSON.parse(data); process.stdout.write(json.latestVersion ?? ''); } catch { process.stdout.write(''); } });" || true)"
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
       - name: Publish to JSR
-        run: npx jsr publish --allow-dirty
-        env:
-          JSR_TOKEN: ${{ secrets.JSR_TOKEN }}
+        if: steps.jsr_version.outputs.current != steps.package_version.outputs.version
+        run: npx jsr publish --allow-dirty --token "${{ secrets.JSR_TOKEN }}"
