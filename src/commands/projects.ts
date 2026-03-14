@@ -17,16 +17,18 @@ function slugify(value: string) {
     .replace(/-+/g, '-');
 }
 
-async function ensureProjectKey(projectId: string) {
-  const existingKey = config.getProjectApiKey(projectId);
-  if (existingKey) return existingKey;
+function resolveProfileName(profileName?: string) {
+  return profileName ?? config.getActiveProfile() ?? 'default';
+}
 
+async function createServerKey(projectId: string, profileName: string) {
   const created = await manageRequest<ManageProjectKey>(`/projects/${projectId}/keys`, {
     method: 'POST',
     body: {
       name: 'CLI server key',
       scope: 'server',
     },
+    profileName,
   });
 
   if (!created.token) {
@@ -36,9 +38,12 @@ async function ensureProjectKey(projectId: string) {
   return created.token;
 }
 
-export async function projectsList() {
-  const projects = await manageRequest<ManageProject[]>('/projects');
-  const activeProjectId = config.get().projectId;
+export async function projectsList(options: { profile?: string } = {}) {
+  const profileName = resolveProfileName(options.profile);
+  config.requireAuth(profileName);
+
+  const projects = await manageRequest<ManageProject[]>('/projects', { profileName });
+  const activeProjectId = config.getProfile(profileName)?.active_project_id;
   const grouped = new Map<string, ManageProject[]>();
 
   for (const project of projects) {
@@ -65,21 +70,37 @@ export async function projectsList() {
   }
 }
 
-export async function projectsUse(projectId: string) {
-  const projects = await manageRequest<ManageProject[]>('/projects');
+export async function projectsUse(projectId: string, options: { profile?: string } = {}) {
+  const profileName = resolveProfileName(options.profile);
+  config.requireAuth(profileName);
+
+  const projects = await manageRequest<ManageProject[]>('/projects', { profileName });
   const project = projects.find((item) => item.id === projectId);
   if (!project) {
     console.log(chalk.red(`Project not found: ${projectId}`));
     process.exit(1);
   }
 
-  const apiKey = await ensureProjectKey(projectId);
-  config.setProjectAuth(projectId, apiKey, project.name);
-  console.log(chalk.green('Active project set to: ') + chalk.cyan(`${project.name} (${project.id})`));
+  await manageRequest<ManageProjectKey[]>(`/projects/${projectId}/keys`, { profileName });
+  const apiKey = await createServerKey(projectId, profileName);
+
+  config.setProfile(profileName, {
+    active_project_id: project.id,
+    active_project_name: project.name,
+    project_api_key: apiKey,
+  });
+  config.setActiveProfile(profileName);
+
+  console.log(
+    chalk.green('Active project set to: ') + chalk.cyan(`${project.name} (${project.id})`)
+  );
 }
 
-export async function projectsCreate() {
-  const orgs = await manageRequest<ManageOrg[]>('/orgs');
+export async function projectsCreate(options: { profile?: string } = {}) {
+  const profileName = resolveProfileName(options.profile);
+  config.requireAuth(profileName);
+
+  const orgs = await manageRequest<ManageOrg[]>('/orgs', { profileName });
   if (!orgs.length) {
     console.log(chalk.red('No organizations found. Create one in the console first.'));
     process.exit(1);
@@ -141,9 +162,15 @@ export async function projectsCreate() {
       slug: values.slug,
       environment: values.environment,
     },
+    profileName,
   });
 
-  config.setProjectAuth(result.project.id, result.keys.server, result.project.name);
+  config.setProfile(profileName, {
+    active_project_id: result.project.id,
+    active_project_name: result.project.name,
+    project_api_key: result.keys.server,
+  });
+  config.setActiveProfile(profileName);
 
   console.log('');
   console.log(chalk.green('Project created successfully.'));

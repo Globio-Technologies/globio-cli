@@ -11,6 +11,7 @@ import {
 import { initFirebase } from '../lib/firebase.js';
 import { createProgressBar } from '../lib/progress.js';
 import { getClient } from '../lib/sdk.js';
+import { config } from '../lib/config.js';
 
 const version = getCliVersion();
 
@@ -18,6 +19,7 @@ interface MigrateFirestoreOptions {
   from: string;
   collection?: string;
   all?: boolean;
+  profile?: string;
 }
 
 interface MigrateStorageOptions {
@@ -25,6 +27,11 @@ interface MigrateStorageOptions {
   bucket: string;
   folder?: string;
   all?: boolean;
+  profile?: string;
+}
+
+function resolveProfileName(profile?: string) {
+  return profile ?? config.getActiveProfile() ?? 'default';
 }
 
 export async function migrateFirestore(options: MigrateFirestoreOptions) {
@@ -32,7 +39,7 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
   p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
 
   const { firestore } = await initFirebase(options.from);
-  const client = getClient();
+  const client = getClient(resolveProfileName(options.profile));
 
   let collections: string[] = [];
 
@@ -139,7 +146,7 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
   p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
 
   const { storage } = await initFirebase(options.from);
-  const client = getClient();
+  const client = getClient(resolveProfileName(options.profile));
 
   const bucketName = options.bucket.replace(/^gs:\/\//, '');
   const bucket = storage.bucket(bucketName);

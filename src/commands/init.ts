@@ -14,20 +14,32 @@ import { projectsCreate, projectsUse } from './projects.js';
 
 const version = getCliVersion();
 
-export async function init() {
+export async function init(options: { profile?: string } = {}) {
   printBanner(version);
   p.intro(orange('⇒⇒') + '  Initialize your Globio project');
 
-  const cfg = config.get();
-  if (!cfg.projectId) {
-    await projectsCreate();
+  const profileName = options.profile ?? config.getActiveProfile() ?? 'default';
+  const profile = config.getProfile(profileName);
+  if (!profile) {
+    console.log('Run: npx @globio/cli login --profile ' + profileName);
+    process.exit(1);
+  }
+
+  if (!profile.active_project_id) {
+    await projectsCreate({ profile: profileName });
   } else {
-    await projectsUse(cfg.projectId);
+    await projectsUse(profile.active_project_id, { profile: profileName });
   }
 
   const values = await promptInit();
-  const activeProjectKey = config.requireProjectApiKey();
-  const activeProjectId = config.requireProject();
+  const activeProfile = config.getProfile(profileName);
+  const activeProjectKey = activeProfile?.project_api_key;
+  const { projectId: activeProjectId } = config.requireProject(profileName);
+
+  if (!activeProjectKey) {
+    console.log('No project API key cached. Run: npx @globio/cli projects use ' + activeProjectId);
+    process.exit(1);
+  }
 
   if (!existsSync('globio.config.ts')) {
     writeFileSync(
@@ -54,6 +66,7 @@ export const globio = new Globio({
     await migrateFirestore({
       from: values.serviceAccountPath as string,
       all: true,
+      profile: profileName,
     });
 
     const serviceAccount = JSON.parse(
@@ -64,6 +77,7 @@ export const globio = new Globio({
       from: values.serviceAccountPath as string,
       bucket: `${serviceAccount.project_id}.appspot.com`,
       all: true,
+      profile: profileName,
     });
   }
 

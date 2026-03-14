@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { config } from '../lib/config.js';
 
 const ALL_SERVICES = [
   'id',
@@ -13,7 +14,9 @@ const ALL_SERVICES = [
   'code',
 ];
 
-export async function servicesList() {
+export async function servicesList(options: { profile?: string } = {}) {
+  void options.profile;
+  void config;
   console.log('');
   console.log(chalk.cyan('Available Globio services:'));
   ALL_SERVICES.forEach((service) => {

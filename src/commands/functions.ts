@@ -2,11 +2,17 @@ import chalk from 'chalk';
 import type { CodeFunction, CodeInvocation } from '@globio/sdk';
 import ora from 'ora';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { config } from '../lib/config.js';
 import { gold, muted, orange } from '../lib/banner.js';
 import { getClient } from '../lib/sdk.js';
 
-export async function functionsList() {
-  const client = getClient();
+function resolveProfileName(profile?: string) {
+  return profile ?? config.getActiveProfile() ?? 'default';
+}
+
+export async function functionsList(options: { profile?: string } = {}) {
+  const profileName = resolveProfileName(options.profile);
+  const client = getClient(profileName);
   const spinner = ora('Fetching functions...').start();
   const result = await client.code.listFunctions();
   spinner.stop();
@@ -29,7 +35,7 @@ export async function functionsList() {
   console.log('');
 }
 
-export async function functionsCreate(slug: string) {
+export async function functionsCreate(slug: string, _options: { profile?: string } = {}) {
   const filename = `${slug}.js`;
   if (existsSync(filename)) {
     console.log(chalk.yellow(`${filename} already exists.`));
@@ -60,7 +66,7 @@ async function handler(input, globio) {
 
 export async function functionsDeploy(
   slug: string,
-  options: { file?: string; name?: string }
+  options: { file?: string; name?: string; profile?: string }
 ) {
   const filename = options.file ?? `${slug}.js`;
   if (!existsSync(filename)) {
@@ -73,7 +79,8 @@ export async function functionsDeploy(
   }
 
   const code = readFileSync(filename, 'utf-8');
-  const client = getClient();
+  const profileName = resolveProfileName(options.profile);
+  const client = getClient(profileName);
   const spinner = ora(`Deploying ${slug}...`).start();
   const existing = await client.code.getFunction(slug);
 
@@ -103,7 +110,7 @@ export async function functionsDeploy(
 
 export async function functionsInvoke(
   slug: string,
-  options: { input?: string }
+  options: { input?: string; profile?: string }
 ) {
   let input: Record<string, unknown> = {};
   if (options.input) {
@@ -115,7 +122,8 @@ export async function functionsInvoke(
     }
   }
 
-  const client = getClient();
+  const profileName = resolveProfileName(options.profile);
+  const client = getClient(profileName);
   const spinner = ora(`Invoking ${slug}...`).start();
   const result = await client.code.invoke(slug, input);
   spinner.stop();
@@ -134,10 +142,11 @@ export async function functionsInvoke(
 
 export async function functionsLogs(
   slug: string,
-  options: { limit?: string }
+  options: { limit?: string; profile?: string }
 ) {
   const limit = options.limit ? parseInt(options.limit, 10) : 20;
-  const client = getClient();
+  const profileName = resolveProfileName(options.profile);
+  const client = getClient(profileName);
   const spinner = ora('Fetching invocations...').start();
   const result = await client.code.getInvocations(slug, limit);
   spinner.stop();
@@ -163,8 +172,9 @@ export async function functionsLogs(
   console.log('');
 }
 
-export async function functionsDelete(slug: string) {
-  const client = getClient();
+export async function functionsDelete(slug: string, options: { profile?: string } = {}) {
+  const profileName = resolveProfileName(options.profile);
+  const client = getClient(profileName);
   const spinner = ora(`Deleting ${slug}...`).start();
   const result = await client.code.deleteFunction(slug);
   if (!result.success) {
@@ -175,8 +185,13 @@ export async function functionsDelete(slug: string) {
   spinner.succeed(`Deleted ${slug}`);
 }
 
-export async function functionsToggle(slug: string, active: boolean) {
-  const client = getClient();
+export async function functionsToggle(
+  slug: string,
+  active: boolean,
+  options: { profile?: string } = {}
+) {
+  const profileName = resolveProfileName(options.profile);
+  const client = getClient(profileName);
   const spinner = ora(
     `${active ? 'Enabling' : 'Disabling'} ${slug}...`
   ).start();

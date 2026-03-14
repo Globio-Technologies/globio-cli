@@ -23,15 +23,11 @@ function sleep(ms: number) {
 
 async function savePat(token: string) {
   const account = await manageRequest<ManageAccount>('/account', { token });
-  config.set({
-    pat: token,
-    accountEmail: account.email,
-    accountName: account.display_name ?? account.email,
-  });
   return account;
 }
 
-async function runTokenLogin() {
+async function runTokenLogin(profileName: string) {
+  const hadProfiles = config.listProfiles().length > 0;
   const token = await p.text({
     message: 'Paste your personal access token',
     placeholder: 'glo_pat_...',
@@ -51,8 +47,17 @@ async function runTokenLogin() {
   spinner.start('Validating personal access token...');
   try {
     const account = await savePat(token);
+    config.setProfile(profileName, {
+      pat: token,
+      account_email: account.email,
+      account_name: account.display_name ?? account.email,
+      created_at: Date.now(),
+    });
+    if (profileName === 'default' || !hadProfiles) {
+      config.setActiveProfile(profileName);
+    }
     spinner.stop('Token validated.');
-    p.outro(`Logged in as ${account.email}`);
+    p.outro(`Logged in as ${account.email}\nProfile: ${profileName}`);
   } catch (error) {
     spinner.stop('Validation failed.');
     p.outro(chalk.red(error instanceof Error ? error.message : 'Could not validate token'));
@@ -60,9 +65,10 @@ async function runTokenLogin() {
   }
 }
 
-async function runBrowserLogin() {
+async function runBrowserLogin(profileName: string) {
   const state = crypto.randomUUID();
   const spinner = p.spinner();
+  const hadProfiles = config.listProfiles().length > 0;
 
   await manageRequest('/cli-auth/request', {
     method: 'POST',
@@ -98,14 +104,18 @@ async function runBrowserLogin() {
           body: { code: status.code },
         });
 
-        config.set({
+        config.setProfile(profileName, {
           pat: exchange.token,
-          accountEmail: exchange.account.email,
-          accountName: exchange.account.display_name ?? exchange.account.email,
+          account_email: exchange.account.email,
+          account_name: exchange.account.display_name ?? exchange.account.email,
+          created_at: Date.now(),
         });
+        if (profileName === 'default' || !hadProfiles) {
+          config.setActiveProfile(profileName);
+        }
 
         spinner.stop('Browser approval received.');
-        p.outro(`Logged in as ${exchange.account.email}`);
+        p.outro(`Logged in as ${exchange.account.email}\nProfile: ${profileName}`);
         return;
       }
     } catch {
@@ -120,11 +130,25 @@ async function runBrowserLogin() {
   process.exit(1);
 }
 
-export async function login(options: { token?: boolean } = {}) {
+export async function login(options: { token?: boolean; profile?: string } = {}) {
   printBanner(version);
+  const profileName = options.profile ?? 'default';
+  const existing = config.getProfile(profileName);
+
+  if (existing) {
+    const proceed = await p.confirm({
+      message: `Already logged in as ${existing.account_email} on profile "${profileName}". Replace?`,
+      initialValue: false,
+    });
+
+    if (p.isCancel(proceed) || !proceed) {
+      p.outro('Login cancelled.');
+      return;
+    }
+  }
 
   if (options.token) {
-    await runTokenLogin();
+    await runTokenLogin(profileName);
     return;
   }
 
@@ -142,12 +166,12 @@ export async function login(options: { token?: boolean } = {}) {
   }
 
   if (choice === 'token') {
-    await runTokenLogin();
+    await runTokenLogin(profileName);
     return;
   }
 
   try {
-    await runBrowserLogin();
+    await runBrowserLogin(profileName);
   } catch (error) {
     p.outro(chalk.red(error instanceof Error ? error.message : 'Could not connect to Globio.'));
     process.exit(1);

@@ -7,6 +7,7 @@ interface ManageRequestOptions {
   method?: string;
   body?: unknown;
   token?: string;
+  profileName?: string;
 }
 
 export interface ManageAccount {
@@ -45,9 +46,9 @@ export interface ManageProjectKey {
   token?: string;
 }
 
-function getAuthToken(explicitToken?: string): string | undefined {
+function getAuthToken(explicitToken?: string, profileName?: string): string | undefined {
   if (explicitToken) return explicitToken;
-  return config.getPat();
+  return config.getProfile(profileName)?.pat;
 }
 
 export async function manageRequest<T>(
@@ -59,7 +60,7 @@ export async function manageRequest<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const token = getAuthToken(options.token);
+  const token = getAuthToken(options.token, options.profileName);
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
