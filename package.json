@@ -1,6 +1,6 @@
 {
   "name": "@globio/cli",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "The official CLI for Globio — game backend as a service",
   "type": "module",
   "license": "MIT",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.9.0",
-    "@globio/sdk": "^1.0.0",
+    "@globio/sdk": "^1.1.0",
     "chalk": "^5.3.0",
     "cli-progress": "^3.12.0",
     "commander": "^12.0.0",

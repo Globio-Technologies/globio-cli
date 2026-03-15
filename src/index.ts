@@ -17,6 +17,14 @@ import {
   functionsDelete,
   functionsToggle,
 } from './commands/functions.js';
+import {
+  hooksList,
+  hooksCreate,
+  hooksDeploy,
+  hooksLogs,
+  hooksToggle,
+  hooksDelete,
+} from './commands/hooks.js';
 import { functionsWatch } from './commands/watch.js';
 import {
   migrateFirestore,
@@ -46,6 +54,8 @@ Examples:
   $ globio projects list
   $ globio projects use proj_abc123
   $ globio functions deploy my-function
+  $ globio hooks deploy on-signup --trigger id.onSignup
+  $ globio hooks list
   $ globio migrate firestore --from ./key.json --all
 
 Credentials are stored in ~/.globio/profiles/
@@ -110,7 +120,7 @@ program.command('services').description('List available Globio services').option
 const functions = program
   .command('functions')
   .alias('fn')
-  .description('Manage GlobalCode edge functions');
+  .description('Manage edge functions');
 
 functions.command('list').description('List all functions').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(functionsList);
 functions.command('create <slug>').description('Scaffold a new function file locally').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(functionsCreate);
@@ -154,6 +164,69 @@ functions
   .option('--profile <name>', 'Use a specific profile')
   .option('--json', 'Output as JSON')
   .action((slug, options) => functionsToggle(slug, false, options));
+
+const hooks = program
+  .command('hooks')
+  .description('Manage GC Hooks')
+  .action(hooksList);
+
+hooks
+  .command('list')
+  .description('List all hooks')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action(hooksList);
+
+hooks
+  .command('create <slug>')
+  .description('Scaffold a new hook file locally')
+  .option('--json', 'Output as JSON')
+  .action(hooksCreate);
+
+hooks
+  .command('deploy <slug>')
+  .description('Deploy a hook')
+  .option('-f, --file <path>', 'Path to hook file')
+  .option('-n, --name <name>', 'Display name')
+  .option('-t, --trigger <event>', 'Hook trigger event (e.g. id.onSignup)')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action(hooksDeploy);
+
+hooks
+  .command('logs <slug>')
+  .description('Show hook invocation history')
+  .option('-l, --limit <n>', 'Number of entries', '20')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action(hooksLogs);
+
+hooks
+  .command('watch <slug>')
+  .description('Stream live hook execution logs')
+  .option('-p, --profile <name>', 'Profile name')
+  .action((slug, opts) => functionsWatch(slug, opts));
+
+hooks
+  .command('enable <slug>')
+  .description('Enable a hook')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action((slug, opts) => hooksToggle(slug, true, opts));
+
+hooks
+  .command('disable <slug>')
+  .description('Disable a hook')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action((slug, opts) => hooksToggle(slug, false, opts));
+
+hooks
+  .command('delete <slug>')
+  .description('Delete a hook')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action(hooksDelete);
 
 const migrate = program
   .command('migrate')
