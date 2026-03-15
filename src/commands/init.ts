@@ -4,6 +4,7 @@ import { config } from '../lib/config.js';
 import {
   failure,
   getCliVersion,
+  jsonOutput,
   muted,
   orange,
   printSuccess,
@@ -11,33 +12,83 @@ import {
 } from '../lib/banner.js';
 import { promptInit } from '../prompts/init.js';
 import { migrateFirestore, migrateFirebaseStorage } from './migrate.js';
-import { projectsCreate, projectsUse } from './projects.js';
+import { buildSlug, createProjectRecord, projectsCreate, projectsUse } from './projects.js';
 
 const version = getCliVersion();
 
-export async function init(options: { profile?: string } = {}) {
-  printBanner(version);
-  p.intro(orange('⇒⇒') + '  Initialize your Globio project');
-
+export async function init(
+  options: {
+    profile?: string;
+    name?: string;
+    slug?: string;
+    org?: string;
+    env?: string;
+    migrate?: boolean;
+    from?: string;
+    json?: boolean;
+  } = {}
+) {
   const profileName = options.profile ?? config.getActiveProfile() ?? 'default';
   const profile = config.getProfile(profileName);
   if (!profile) {
+    if (options.json) {
+      jsonOutput({ success: false, error: `Run: npx @globio/cli login --profile ${profileName}` });
+    }
     console.log(failure('Run: npx @globio/cli login --profile ' + profileName));
     process.exit(1);
   }
 
-  if (!profile.active_project_id) {
-    await projectsCreate({ profile: profileName });
-  } else {
-    await projectsUse(profile.active_project_id, { profile: profileName });
+  const isNonInteractive = Boolean(options.name && options.org);
+  let filesCreated: string[] = [];
+
+  if (options.json && !isNonInteractive) {
+    jsonOutput({
+      success: false,
+      error: 'init --json requires --name <name> and --org <orgId>',
+    });
   }
 
-  const values = await promptInit();
+  if (!isNonInteractive) {
+    printBanner(version);
+    p.intro(orange('⇒⇒') + '  Initialize your Globio project');
+
+    if (!profile.active_project_id) {
+      await projectsCreate({ profile: profileName });
+    } else {
+      await projectsUse(profile.active_project_id, { profile: profileName });
+    }
+  } else {
+    const orgId = options.org as string;
+    const orgName = profile.org_name;
+    const created = await createProjectRecord({
+      profileName,
+      orgId,
+      orgName,
+      name: options.name as string,
+      slug: options.slug ?? buildSlug(options.name as string),
+      environment: options.env ?? 'development',
+    });
+    void created;
+  }
+
+  const values = isNonInteractive
+    ? {
+        migrateFromFirebase: Boolean(options.from),
+        serviceAccountPath: options.from,
+      }
+    : await promptInit();
   const activeProfile = config.getProfile(profileName);
   const activeProjectKey = activeProfile?.project_api_key;
   const { projectId: activeProjectId } = config.requireProject(profileName);
+  const activeProjectName = activeProfile?.active_project_name ?? 'unnamed';
 
   if (!activeProjectKey) {
+    if (options.json) {
+      jsonOutput({
+        success: false,
+        error: `No project API key cached. Run: npx @globio/cli projects use ${activeProjectId}`,
+      });
+    }
     console.log(failure('No project API key cached. Run: npx @globio/cli projects use ' + activeProjectId));
     process.exit(1);
   }
@@ -53,17 +104,25 @@ export const globio = new Globio({
 });
 `
     );
-    printSuccess('Created globio.config.ts');
+    filesCreated.push('globio.config.ts');
+    if (!options.json) {
+      printSuccess('Created globio.config.ts');
+    }
   }
 
   if (!existsSync('.env')) {
     writeFileSync('.env', `GLOBIO_API_KEY=${activeProjectKey}\n`);
-    printSuccess('Created .env');
+    filesCreated.push('.env');
+    if (!options.json) {
+      printSuccess('Created .env');
+    }
   }
 
   if (values.migrateFromFirebase && values.serviceAccountPath) {
-    console.log('');
-    printSuccess('Starting Firebase migration...');
+    if (!options.json) {
+      console.log('');
+      printSuccess('Starting Firebase migration...');
+    }
 
     await migrateFirestore({
       from: values.serviceAccountPath as string,
@@ -80,6 +139,16 @@ export const globio = new Globio({
       bucket: `${serviceAccount.project_id}.appspot.com`,
       all: true,
       profile: profileName,
+    });
+  }
+
+  if (options.json) {
+    jsonOutput({
+      success: true,
+      project_id: activeProjectId,
+      project_name: activeProjectName,
+      api_key: activeProjectKey,
+      files_created: filesCreated,
     });
   }
 

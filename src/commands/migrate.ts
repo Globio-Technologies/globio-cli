@@ -5,6 +5,7 @@ import {
   getCliVersion,
   gold,
   green,
+  jsonOutput,
   muted,
   orange,
   printBanner,
@@ -21,6 +22,7 @@ interface MigrateFirestoreOptions {
   collection?: string;
   all?: boolean;
   profile?: string;
+  json?: boolean;
 }
 
 interface MigrateStorageOptions {
@@ -29,15 +31,36 @@ interface MigrateStorageOptions {
   folder?: string;
   all?: boolean;
   profile?: string;
+  json?: boolean;
+}
+
+interface FirestoreCollectionResult {
+  name: string;
+  migrated: number;
+  failed: number;
+  failed_ids: string[];
+}
+
+interface FirestoreMigrationSummary {
+  collections: FirestoreCollectionResult[];
+  total_migrated: number;
+  total_failed: number;
+}
+
+interface StorageMigrationSummary {
+  migrated: number;
+  failed: number;
 }
 
 function resolveProfileName(profile?: string) {
   return profile ?? config.getActiveProfile() ?? 'default';
 }
 
-export async function migrateFirestore(options: MigrateFirestoreOptions) {
-  printBanner(version);
-  p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
+export async function migrateFirestore(options: MigrateFirestoreOptions): Promise<void> {
+  if (!options.json) {
+    printBanner(version);
+    p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
+  }
 
   const { firestore } = await initFirebase(options.from);
   const profileName = resolveProfileName(options.profile);
@@ -47,32 +70,34 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
   if (options.all) {
     const snapshot = await firestore.listCollections();
     collections = snapshot.map((collection) => collection.id);
-    console.log(
-      green(
-        `Found ${collections.length} collections: ${collections.join(', ')}`
-      )
-    );
+    if (!options.json) {
+      console.log(
+        green(`Found ${collections.length} collections: ${collections.join(', ')}`)
+      );
+    }
   } else if (options.collection) {
     collections = [options.collection];
   } else {
+    if (options.json) {
+      jsonOutput({ success: false, error: 'Specify --collection <name> or --all' });
+    }
     console.log(failure('Specify --collection <name> or --all'));
     process.exit(1);
   }
 
-  const results: Record<
-    string,
-    { success: number; failed: number; failedIds: string[] }
-  > = {};
+  const results: Record<string, { success: number; failed: number; failedIds: string[] }> = {};
 
   for (const collectionId of collections) {
-    console.log('');
-    console.log('  ' + orange(collectionId));
+    if (!options.json) {
+      console.log('');
+      console.log('  ' + orange(collectionId));
+    }
 
     const countSnap = await firestore.collection(collectionId).count().get();
     const total = countSnap.data().count;
 
-    const bar = createProgressBar(collectionId);
-    bar.start(total, 0);
+    const bar = options.json ? null : createProgressBar(collectionId);
+    bar?.start(total, 0);
 
     results[collectionId] = {
       success: 0,
@@ -87,7 +112,6 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
 
     while (processed < total) {
       let query = firestore.collection(collectionId).limit(100);
-
       if (lastDoc) {
         query = query.startAfter(lastDoc as never);
       }
@@ -119,33 +143,47 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
           results[collectionId].failed++;
           results[collectionId].failedIds.push(doc.id);
         }
+
         processed++;
-        bar.update(processed);
+        bar?.update(processed);
       }
 
       lastDoc = snapshot.docs[snapshot.docs.length - 1] ?? null;
     }
 
-    bar.stop();
+    bar?.stop();
 
-    console.log(
-      green(`  ✓ ${results[collectionId].success} documents migrated`)
-    );
-    if (indexFieldCount > 0) {
-      console.log(
-        muted(`  Indexes created for ${indexFieldCount} fields`)
-      );
+    if (!options.json) {
+      console.log(green(`  ✓ ${results[collectionId].success} documents migrated`));
+      if (indexFieldCount > 0) {
+        console.log(muted(`  Indexes created for ${indexFieldCount} fields`));
+      }
+      if (results[collectionId].failed > 0) {
+        console.log(failure(`  ✗ ${results[collectionId].failed} failed`) + '\x1b[0m');
+        console.log(
+          muted(
+            '  Failed IDs: ' +
+              results[collectionId].failedIds.slice(0, 10).join(', ') +
+              (results[collectionId].failedIds.length > 10 ? '...' : '')
+          )
+        );
+      }
     }
-    if (results[collectionId].failed > 0) {
-      console.log(failure(`  ✗ ${results[collectionId].failed} failed`) + '\x1b[0m');
-      console.log(
-        muted(
-          '  Failed IDs: ' +
-            results[collectionId].failedIds.slice(0, 10).join(', ') +
-            (results[collectionId].failedIds.length > 10 ? '...' : '')
-        )
-      );
-    }
+  }
+
+  const summary: FirestoreMigrationSummary = {
+    collections: collections.map((name) => ({
+      name,
+      migrated: results[name]?.success ?? 0,
+      failed: results[name]?.failed ?? 0,
+      failed_ids: results[name]?.failedIds ?? [],
+    })),
+    total_migrated: collections.reduce((sum, name) => sum + (results[name]?.success ?? 0), 0),
+    total_failed: collections.reduce((sum, name) => sum + (results[name]?.failed ?? 0), 0),
+  };
+
+  if (options.json) {
+    jsonOutput(summary);
   }
 
   console.log('');
@@ -158,11 +196,14 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
       '  ' +
       muted('Delete it manually when ready.')
   );
+
 }
 
-export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
-  printBanner(version);
-  p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
+export async function migrateFirebaseStorage(options: MigrateStorageOptions): Promise<void> {
+  if (!options.json) {
+    printBanner(version);
+    p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
+  }
 
   const { storage } = await initFirebase(options.from);
   const profileName = resolveProfileName(options.profile);
@@ -178,10 +219,12 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
 
   const [files] = await bucket.getFiles(prefix ? { prefix } : {});
 
-  console.log(green(`Found ${files.length} files to migrate`));
+  if (!options.json) {
+    console.log(green(`Found ${files.length} files to migrate`));
+  }
 
-  const bar = createProgressBar('Storage');
-  bar.start(files.length, 0);
+  const bar = options.json ? null : createProgressBar('Storage');
+  bar?.start(files.length, 0);
 
   let success = 0;
   let failed = 0;
@@ -198,16 +241,13 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
       );
       formData.append('path', file.name);
 
-      const res = await fetch(
-        'https://api.globio.stanlink.online/vault/files',
-        {
-          method: 'POST',
-          headers: {
-            'X-Globio-Key': profile.project_api_key,
-          },
-          body: formData,
-        }
-      );
+      const res = await fetch('https://api.globio.stanlink.online/vault/files', {
+        method: 'POST',
+        headers: {
+          'X-Globio-Key': profile.project_api_key,
+        },
+        body: formData,
+      });
 
       if (!res.ok) {
         throw new Error(`Upload failed: ${res.status}`);
@@ -217,10 +257,20 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
     } catch {
       failed++;
     }
-    bar.increment();
+
+    bar?.increment();
   }
 
-  bar.stop();
+  bar?.stop();
+
+  const summary: StorageMigrationSummary = {
+    migrated: success,
+    failed,
+  };
+
+  if (options.json) {
+    jsonOutput(summary);
+  }
 
   console.log('');
   console.log(green(`  ✓ ${success} files migrated`));
@@ -237,4 +287,5 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
       '  ' +
       muted('Delete it manually when ready.')
   );
+
 }

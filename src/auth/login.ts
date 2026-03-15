@@ -2,7 +2,7 @@ import * as p from '@clack/prompts';
 import { exec } from 'child_process';
 import { config } from '../lib/config.js';
 import { getConsoleCliAuthUrl, manageRequest, type ManageAccount } from '../lib/manage.js';
-import { failure, getCliVersion, muted, orange, printBanner, white } from '../lib/banner.js';
+import { failure, getCliVersion, jsonOutput, muted, orange, printBanner, white } from '../lib/banner.js';
 
 const version = getCliVersion();
 
@@ -25,6 +25,19 @@ async function savePat(token: string) {
   return account;
 }
 
+function storeProfile(profileName: string, token: string, account: ManageAccount) {
+  const hadProfiles = config.listProfiles().length > 0;
+  config.setProfile(profileName, {
+    pat: token,
+    account_email: account.email,
+    account_name: account.display_name ?? account.email,
+    created_at: Date.now(),
+  });
+  if (profileName === 'default' || !hadProfiles) {
+    config.setActiveProfile(profileName);
+  }
+}
+
 function warnOnDuplicateAccount(accountEmail: string, targetProfileName: string) {
   const allProfiles = config.listProfiles();
   const duplicate = allProfiles.find((name) => {
@@ -45,8 +58,30 @@ function warnOnDuplicateAccount(accountEmail: string, targetProfileName: string)
   console.log('');
 }
 
-async function runTokenLogin(profileName: string) {
-  const hadProfiles = config.listProfiles().length > 0;
+async function completeTokenLogin(
+  token: string,
+  profileName: string,
+  json = false
+) {
+  const account = await savePat(token);
+  if (!json) {
+    warnOnDuplicateAccount(account.email, profileName);
+  }
+  storeProfile(profileName, token, account);
+
+  if (json) {
+    jsonOutput({
+      success: true,
+      email: account.email,
+      name: account.display_name ?? account.email,
+      profile: profileName,
+    });
+  }
+
+  return account;
+}
+
+async function runTokenLogin(profileName: string, json = false) {
   const token = await p.text({
     message: 'Paste your personal access token',
     placeholder: 'glo_pat_...',
@@ -65,17 +100,7 @@ async function runTokenLogin(profileName: string) {
   const spinner = p.spinner();
   spinner.start('Validating personal access token...');
   try {
-    const account = await savePat(token);
-    warnOnDuplicateAccount(account.email, profileName);
-    config.setProfile(profileName, {
-      pat: token,
-      account_email: account.email,
-      account_name: account.display_name ?? account.email,
-      created_at: Date.now(),
-    });
-    if (profileName === 'default' || !hadProfiles) {
-      config.setActiveProfile(profileName);
-    }
+    const account = await completeTokenLogin(token, profileName, json);
     spinner.stop('Token validated.');
     p.outro(`Logged in as ${account.email}\nProfile: ${profileName}`);
   } catch (error) {
@@ -85,10 +110,9 @@ async function runTokenLogin(profileName: string) {
   }
 }
 
-async function runBrowserLogin(profileName: string) {
+async function runBrowserLogin(profileName: string, json = false) {
   const state = crypto.randomUUID();
   const spinner = p.spinner();
-  const hadProfiles = config.listProfiles().length > 0;
 
   await manageRequest('/cli-auth/request', {
     method: 'POST',
@@ -124,15 +148,26 @@ async function runBrowserLogin(profileName: string) {
           body: { code: status.code },
         });
 
-        warnOnDuplicateAccount(exchange.account.email, profileName);
+        if (!json) {
+          warnOnDuplicateAccount(exchange.account.email, profileName);
+        }
         config.setProfile(profileName, {
           pat: exchange.token,
           account_email: exchange.account.email,
           account_name: exchange.account.display_name ?? exchange.account.email,
           created_at: Date.now(),
         });
-        if (profileName === 'default' || !hadProfiles) {
+        if (profileName === 'default' || config.listProfiles().length === 1) {
           config.setActiveProfile(profileName);
+        }
+
+        if (json) {
+          jsonOutput({
+            success: true,
+            email: exchange.account.email,
+            name: exchange.account.display_name ?? exchange.account.email,
+            profile: profileName,
+          });
         }
 
         spinner.stop('Browser approval received.');
@@ -151,10 +186,39 @@ async function runBrowserLogin(profileName: string) {
   process.exit(1);
 }
 
-export async function login(options: { token?: boolean; profile?: string } = {}) {
-  printBanner(version);
+export async function login(
+  options: { token?: string; profile?: string; json?: boolean } = {}
+) {
   const profileName = options.profile ?? 'default';
   const existing = config.getProfile(profileName);
+
+  if (options.token) {
+    try {
+      const account = await completeTokenLogin(options.token, profileName, options.json);
+      if (!options.json) {
+        console.log(`Logged in as ${account.email}\nProfile: ${profileName}`);
+      }
+      return;
+    } catch (error) {
+      if (options.json) {
+        jsonOutput({
+          success: false,
+          error: error instanceof Error ? error.message : 'Could not validate token',
+        });
+      }
+      console.log(failure(error instanceof Error ? error.message : 'Could not validate token'));
+      process.exit(1);
+    }
+  }
+
+  if (options.json) {
+    jsonOutput({
+      success: false,
+      error: 'login --json requires --token <pat>',
+    });
+  }
+
+  printBanner(version);
 
   if (existing) {
     const proceed = await p.confirm({
@@ -166,11 +230,6 @@ export async function login(options: { token?: boolean; profile?: string } = {})
       p.outro('Login cancelled.');
       return;
     }
-  }
-
-  if (options.token) {
-    await runTokenLogin(profileName);
-    return;
   }
 
   const choice = await p.select({
@@ -187,12 +246,12 @@ export async function login(options: { token?: boolean; profile?: string } = {})
   }
 
   if (choice === 'token') {
-    await runTokenLogin(profileName);
+    await runTokenLogin(profileName, options.json);
     return;
   }
 
   try {
-    await runBrowserLogin(profileName);
+    await runBrowserLogin(profileName, options.json);
   } catch (error) {
     p.outro(failure(error instanceof Error ? error.message : 'Could not connect to Globio.') + '\x1b[0m');
     process.exit(1);

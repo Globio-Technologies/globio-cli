@@ -56,72 +56,103 @@ program
   .command('login')
   .description('Log in to your Globio account')
   .option('-p, --profile <name>', 'Profile name', 'default')
-  .option('--token', 'Use a personal access token')
+  .option('--token <pat>', 'Personal access token (non-interactive)')
+  .option('--json', 'Output as JSON')
   .action(login);
 program.command('logout').description('Log out').option('--profile <name>', 'Use a specific profile').action(logout);
-program.command('whoami').description('Show current account and project').option('--profile <name>', 'Use a specific profile').action(whoami);
+program.command('whoami').description('Show current account and project').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(whoami);
 program.command('use <profile>').description('Switch active profile').action(useProfile);
 
-program.command('init').description('Initialize a Globio project').option('--profile <name>', 'Use a specific profile').action(init);
+program
+  .command('init')
+  .description('Initialize a Globio project')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--name <name>', 'Project name')
+  .option('--slug <slug>', 'Project slug')
+  .option('--org <orgId>', 'Organization ID')
+  .option('--env <environment>', 'Environment (development|staging|production)', 'development')
+  .option('--no-migrate', 'Skip Firebase migration prompt')
+  .option('--from <path>', 'Firebase service account path (triggers migration)')
+  .option('--json', 'Output as JSON')
+  .action(init);
 
 const profiles = program
   .command('profiles')
   .description('Manage login profiles')
-  .action(profilesList);
+  .option('--json', 'Output as JSON')
+  .action(function (this: Command) {
+    return profilesList(this.opts());
+  });
 
 profiles
   .command('list')
   .description('List all profiles')
-  .action(profilesList);
+  .option('--json', 'Output as JSON')
+  .action(function (this: Command) {
+    return profilesList(this.opts());
+  });
 
 const projects = program.command('projects').description('Manage projects');
-projects.command('list').description('List projects').option('--profile <name>', 'Use a specific profile').action(projectsList);
-projects.command('create').description('Create a project').option('--profile <name>', 'Use a specific profile').action(projectsCreate);
-projects.command('use <projectId>').description('Set active project').option('--profile <name>', 'Use a specific profile').action(projectsUse);
+projects.command('list').description('List projects').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(projectsList);
+projects
+  .command('create')
+  .description('Create a project')
+  .option('--name <name>', 'Project name')
+  .option('--org <orgId>', 'Organization ID')
+  .option('--env <environment>', 'Environment', 'development')
+  .option('-p, --profile <name>', 'Profile name')
+  .option('--json', 'Output as JSON')
+  .action(projectsCreate);
+projects.command('use <projectId>').description('Set active project').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(projectsUse);
 
-program.command('services').description('List available Globio services').option('--profile <name>', 'Use a specific profile').action(servicesList);
+program.command('services').description('List available Globio services').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(servicesList);
 
 const functions = program
   .command('functions')
   .alias('fn')
   .description('Manage GlobalCode edge functions');
 
-functions.command('list').description('List all functions').option('--profile <name>', 'Use a specific profile').action(functionsList);
-functions.command('create <slug>').description('Scaffold a new function file locally').option('--profile <name>', 'Use a specific profile').action(functionsCreate);
+functions.command('list').description('List all functions').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(functionsList);
+functions.command('create <slug>').description('Scaffold a new function file locally').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(functionsCreate);
 functions
   .command('deploy <slug>')
   .description('Deploy a function to GlobalCode')
   .option('-f, --file <path>', 'Path to function file')
   .option('-n, --name <name>', 'Display name')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action(functionsDeploy);
 functions
   .command('invoke <slug>')
   .description('Invoke a function')
   .option('-i, --input <json>', 'JSON input payload')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action(functionsInvoke);
 functions
   .command('logs <slug>')
   .description('Show invocation history')
   .option('-l, --limit <n>', 'Number of entries', '20')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action(functionsLogs);
 functions
   .command('watch <slug>')
   .description('Stream live function execution logs')
   .option('--profile <name>', 'Use a specific profile')
   .action(functionsWatch);
-functions.command('delete <slug>').description('Delete a function').option('--profile <name>', 'Use a specific profile').action(functionsDelete);
+functions.command('delete <slug>').description('Delete a function').option('--profile <name>', 'Use a specific profile').option('--json', 'Output as JSON').action(functionsDelete);
 functions
   .command('enable <slug>')
   .description('Enable a function')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action((slug, options) => functionsToggle(slug, true, options));
 functions
   .command('disable <slug>')
   .description('Disable a function')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action((slug, options) => functionsToggle(slug, false, options));
 
 const migrate = program
@@ -135,6 +166,7 @@ migrate
   .option('--collection <name>', 'Migrate a specific collection')
   .option('--all', 'Migrate all collections')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action(migrateFirestore);
 
 migrate
@@ -145,6 +177,7 @@ migrate
   .option('--folder <path>', 'Migrate a specific folder')
   .option('--all', 'Migrate all files')
   .option('--profile <name>', 'Use a specific profile')
+  .option('--json', 'Output as JSON')
   .action(migrateFirebaseStorage);
 
 async function main() {

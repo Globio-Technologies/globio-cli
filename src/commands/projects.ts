@@ -14,6 +14,7 @@ import {
   green,
   header,
   inactive,
+  jsonOutput,
   muted,
   orange,
   renderTable,
@@ -54,12 +55,64 @@ async function createServerKey(projectId: string, profileName: string) {
   return created.token;
 }
 
-export async function projectsList(options: { profile?: string } = {}) {
+function buildSlug(value: string) {
+  return slugify(value).slice(0, 30);
+}
+
+async function createProjectRecord(
+  input: {
+    profileName: string;
+    orgId: string;
+    orgName?: string;
+    name: string;
+    slug?: string;
+    environment?: string;
+  }
+) {
+  const result = await manageRequest<{
+    project: { id: string; name: string; slug: string; environment: string; active: boolean };
+    keys: { client: string; server: string };
+  }>('/projects', {
+    method: 'POST',
+    body: {
+      org_id: input.orgId,
+      name: input.name,
+      slug: input.slug ?? buildSlug(input.name),
+      environment: input.environment ?? 'development',
+    },
+    profileName: input.profileName,
+  });
+
+  config.setProfile(input.profileName, {
+    active_project_id: result.project.id,
+    active_project_name: result.project.name,
+    org_name: input.orgName,
+    project_api_key: result.keys.server,
+  });
+  config.setActiveProfile(input.profileName);
+
+  return result;
+}
+
+export async function projectsList(options: { profile?: string; json?: boolean } = {}) {
   const profileName = resolveProfileName(options.profile);
   config.requireAuth(profileName);
 
   const projects = await manageRequest<ManageProject[]>('/projects', { profileName });
   const activeProjectId = config.getProfile(profileName)?.active_project_id;
+
+  if (options.json) {
+    jsonOutput(
+      projects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        org_id: project.org_id,
+        org_name: project.org_name,
+        environment: project.environment,
+        active: project.id === activeProjectId,
+      }))
+    );
+  }
 
   if (!projects.length) {
     console.log(header(version) + '  ' + muted('No projects found.') + '\n');
@@ -72,7 +125,15 @@ export async function projectsList(options: { profile?: string } = {}) {
       : white(project.name),
     muted(project.id),
     muted(project.org_name || project.org_id),
-    inactive(project.environment?.slice(0, 4) ?? 'dev'),
+    inactive(
+      project.environment === 'development'
+        ? 'dev'
+        : project.environment === 'production'
+          ? 'prod'
+          : project.environment === 'staging'
+            ? 'stg'
+            : project.environment ?? 'dev'
+    ),
   ]);
 
   console.log(header(version));
@@ -92,13 +153,19 @@ export async function projectsList(options: { profile?: string } = {}) {
   );
 }
 
-export async function projectsUse(projectId: string, options: { profile?: string } = {}) {
+export async function projectsUse(
+  projectId: string,
+  options: { profile?: string; json?: boolean } = {}
+) {
   const profileName = resolveProfileName(options.profile);
   config.requireAuth(profileName);
 
   const projects = await manageRequest<ManageProject[]>('/projects', { profileName });
   const project = projects.find((item) => item.id === projectId);
   if (!project) {
+    if (options.json) {
+      jsonOutput({ success: false, error: `Project not found: ${projectId}` });
+    }
     console.log(failure(`Project not found: ${projectId}`));
     process.exit(1);
   }
@@ -114,10 +181,26 @@ export async function projectsUse(projectId: string, options: { profile?: string
   });
   config.setActiveProfile(profileName);
 
+  if (options.json) {
+    jsonOutput({
+      success: true,
+      project_id: project.id,
+      project_name: project.name,
+    });
+  }
+
   console.log(green('Active project: ') + `${project.name} (${project.id})`);
 }
 
-export async function projectsCreate(options: { profile?: string } = {}) {
+export async function projectsCreate(
+  options: {
+    profile?: string;
+    name?: string;
+    org?: string;
+    env?: string;
+    json?: boolean;
+  } = {}
+) {
   const profileName = resolveProfileName(options.profile);
   config.requireAuth(profileName);
 
@@ -125,6 +208,51 @@ export async function projectsCreate(options: { profile?: string } = {}) {
   if (!orgs.length) {
     console.log(failure('No organizations found. Create one in the console first.'));
     process.exit(1);
+  }
+
+  const isNonInteractive = Boolean(options.name && options.org);
+
+  if (options.json && !isNonInteractive) {
+    jsonOutput({
+      success: false,
+      error: 'projects create --json requires --name <name> and --org <orgId>',
+    });
+  }
+
+  if (isNonInteractive) {
+    const org = orgs.find((item) => item.id === options.org);
+    if (!org) {
+      console.log(failure(`Organization not found: ${options.org}`));
+      process.exit(1);
+    }
+
+    const result = await createProjectRecord({
+      profileName,
+      orgId: org.id,
+      orgName: org.name,
+      name: options.name as string,
+      environment: options.env ?? 'development',
+    });
+
+    if (options.json) {
+      jsonOutput({
+        success: true,
+        project_id: result.project.id,
+        project_name: result.project.name,
+        org_id: org.id,
+        environment: result.project.environment,
+        client_key: result.keys.client,
+        server_key: result.keys.server,
+      });
+    }
+
+    console.log('');
+    console.log(green('Project created successfully.'));
+    console.log(orange('Project: ') + reset + `${result.project.name} (${result.project.id})`);
+    console.log(orange('Client key: ') + reset + result.keys.client);
+    console.log(orange('Server key: ') + reset + result.keys.server);
+    console.log('');
+    return;
   }
 
   const orgId = await p.select({
@@ -151,7 +279,7 @@ export async function projectsCreate(options: { profile?: string } = {}) {
       slug: ({ results }) =>
         p.text({
           message: 'Project slug',
-          initialValue: slugify(String(results.name ?? '')),
+          initialValue: buildSlug(String(results.name ?? '')),
           validate: (value) => (!value ? 'Project slug is required' : undefined),
         }),
       environment: () =>
@@ -172,27 +300,14 @@ export async function projectsCreate(options: { profile?: string } = {}) {
     }
   );
 
-  const result = await manageRequest<{
-    project: { id: string; name: string; slug: string; environment: string; active: boolean };
-    keys: { client: string; server: string };
-  }>('/projects', {
-    method: 'POST',
-    body: {
-      org_id: orgId,
-      name: values.name,
-      slug: values.slug,
-      environment: values.environment,
-    },
+  const result = await createProjectRecord({
     profileName,
+    orgId,
+    orgName: orgs.find((org) => org.id === orgId)?.name,
+    name: String(values.name),
+    slug: String(values.slug),
+    environment: String(values.environment),
   });
-
-  config.setProfile(profileName, {
-    active_project_id: result.project.id,
-    active_project_name: result.project.name,
-    org_name: orgs.find((org) => org.id === orgId)?.name,
-    project_api_key: result.keys.server,
-  });
-  config.setActiveProfile(profileName);
 
   console.log('');
   console.log(green('Project created successfully.'));
@@ -201,3 +316,5 @@ export async function projectsCreate(options: { profile?: string } = {}) {
   console.log(orange('Server key: ') + reset + result.keys.server);
   console.log('');
 }
+
+export { createProjectRecord, buildSlug };

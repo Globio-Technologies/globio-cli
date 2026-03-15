@@ -95,3 +95,8 @@ export function header(version: string, subtitle?: string): string {
 export function footer(text: string): string {
   return '\n' + dim('  ' + text) + '\n';
 }
+
+export function jsonOutput(data: unknown): void {
+  console.log(JSON.stringify(data, null, 2));
+  process.exit(0);
+}

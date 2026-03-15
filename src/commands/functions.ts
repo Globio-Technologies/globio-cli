@@ -8,6 +8,7 @@ import {
   green,
   header,
   inactive,
+  jsonOutput,
   muted,
   orange,
   gold,
@@ -21,10 +22,32 @@ function resolveProfileName(profile?: string) {
   return profile ?? config.getActiveProfile() ?? 'default';
 }
 
-export async function functionsList(options: { profile?: string } = {}) {
+function parseJsonField<T>(value: string | null | undefined): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+export async function functionsList(options: { profile?: string; json?: boolean } = {}) {
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
   const result = await client.code.listFunctions();
+
+  if (options.json) {
+    jsonOutput(
+      result.success
+        ? result.data.map((fn: CodeFunction) => ({
+            slug: fn.slug,
+            type: fn.type,
+            trigger_event: fn.trigger_event,
+            active: fn.active,
+          }))
+        : []
+    );
+  }
 
   if (!result.success || !result.data.length) {
     console.log(header(version) + '  ' + muted('No functions found.') + '\n');
@@ -53,9 +76,15 @@ export async function functionsList(options: { profile?: string } = {}) {
   console.log('');
 }
 
-export async function functionsCreate(slug: string, _options: { profile?: string } = {}) {
+export async function functionsCreate(
+  slug: string,
+  options: { profile?: string; json?: boolean } = {}
+) {
   const filename = `${slug}.js`;
   if (existsSync(filename)) {
+    if (options.json) {
+      jsonOutput({ success: false, file: filename, error: 'File already exists' });
+    }
     console.log(inactive(`${filename} already exists.`));
     return;
   }
@@ -76,13 +105,16 @@ async function handler(input, globio) {
 }
 `;
   writeFileSync(filename, template);
+  if (options.json) {
+    jsonOutput({ success: true, file: filename });
+  }
   console.log(green(`Created ${filename}`));
   console.log(muted(`Deploy with: npx @globio/cli functions deploy ${slug}`));
 }
 
 export async function functionsDeploy(
   slug: string,
-  options: { file?: string; name?: string; profile?: string }
+  options: { file?: string; name?: string; profile?: string; json?: boolean }
 ) {
   const filename = options.file ?? `${slug}.js`;
   if (!existsSync(filename)) {
@@ -97,8 +129,8 @@ export async function functionsDeploy(
   const code = readFileSync(filename, 'utf-8');
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
-  const spinner = ora(`Deploying ${slug}...`).start();
   const existing = await client.code.getFunction(slug);
+  const spinner = options.json ? null : ora(`Deploying ${slug}...`).start();
 
   let result;
   if (existing.success) {
@@ -116,17 +148,28 @@ export async function functionsDeploy(
   }
 
   if (!result.success) {
-    spinner.fail('Deploy failed');
+    if (options.json) {
+      jsonOutput({ success: false, error: result.error.message });
+    }
+    spinner?.fail('Deploy failed');
     console.error(result.error.message);
     process.exit(1);
   }
 
-  spinner.succeed(existing.success ? `Updated ${slug}` : `Deployed ${slug}`);
+  if (options.json) {
+    jsonOutput({
+      success: true,
+      slug,
+      action: existing.success ? 'updated' : 'created',
+    });
+  }
+
+  spinner?.succeed(existing.success ? `Updated ${slug}` : `Deployed ${slug}`);
 }
 
 export async function functionsInvoke(
   slug: string,
-  options: { input?: string; profile?: string }
+  options: { input?: string; profile?: string; json?: boolean }
 ) {
   let input: Record<string, unknown> = {};
   if (options.input) {
@@ -140,14 +183,24 @@ export async function functionsInvoke(
 
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
-  const spinner = ora(`Invoking ${slug}...`).start();
+  const spinner = options.json ? null : ora(`Invoking ${slug}...`).start();
   const result = await client.code.invoke(slug, input);
-  spinner.stop();
+  spinner?.stop();
 
   if (!result.success) {
+    if (options.json) {
+      jsonOutput({ success: false, error: result.error.message });
+    }
     console.log(failure('Invocation failed'));
     console.error(result.error.message);
     return;
+  }
+
+  if (options.json) {
+    jsonOutput({
+      result: result.data.result,
+      duration_ms: result.data.duration_ms,
+    });
   }
 
   console.log('');
@@ -158,12 +211,35 @@ export async function functionsInvoke(
 
 export async function functionsLogs(
   slug: string,
-  options: { limit?: string; profile?: string }
+  options: { limit?: string; profile?: string; json?: boolean }
 ) {
   const limit = options.limit ? parseInt(options.limit, 10) : 20;
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
   const result = await client.code.getInvocations(slug, limit);
+
+  if (options.json) {
+    jsonOutput(
+      result.success
+        ? (result.data as Array<CodeInvocation & {
+            logs?: string | null;
+            error_message?: string | null;
+            input?: string | null;
+            result?: string | null;
+          }>).map((invocation) => ({
+            id: invocation.id,
+            trigger_type: invocation.trigger_type,
+            duration_ms: invocation.duration_ms,
+            success: invocation.success,
+            invoked_at: invocation.invoked_at,
+            logs: parseJsonField<string[]>(invocation.logs) ?? [],
+            error_message: invocation.error_message ?? null,
+            input: parseJsonField<Record<string, unknown>>(invocation.input),
+            result: parseJsonField<unknown>(invocation.result),
+          }))
+        : []
+    );
+  }
 
   if (!result.success || !result.data.length) {
     console.log(header(version) + '  ' + muted('No invocations yet.') + '\n');
@@ -198,34 +274,49 @@ export async function functionsLogs(
   console.log('');
 }
 
-export async function functionsDelete(slug: string, options: { profile?: string } = {}) {
+export async function functionsDelete(
+  slug: string,
+  options: { profile?: string; json?: boolean } = {}
+) {
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
-  const spinner = ora(`Deleting ${slug}...`).start();
+  const spinner = options.json ? null : ora(`Deleting ${slug}...`).start();
   const result = await client.code.deleteFunction(slug);
   if (!result.success) {
-    spinner.fail(`Delete failed for ${slug}`);
+    if (options.json) {
+      jsonOutput({ success: false, error: result.error.message });
+    }
+    spinner?.fail(`Delete failed for ${slug}`);
     console.error(result.error.message);
     process.exit(1);
   }
-  spinner.succeed(`Deleted ${slug}`);
+  if (options.json) {
+    jsonOutput({ success: true, slug });
+  }
+  spinner?.succeed(`Deleted ${slug}`);
 }
 
 export async function functionsToggle(
   slug: string,
   active: boolean,
-  options: { profile?: string } = {}
+  options: { profile?: string; json?: boolean } = {}
 ) {
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
-  const spinner = ora(
-    `${active ? 'Enabling' : 'Disabling'} ${slug}...`
-  ).start();
+  const spinner = options.json
+    ? null
+    : ora(`${active ? 'Enabling' : 'Disabling'} ${slug}...`).start();
   const result = await client.code.toggleFunction(slug, active);
   if (!result.success) {
-    spinner.fail(`Toggle failed for ${slug}`);
+    if (options.json) {
+      jsonOutput({ success: false, error: result.error.message });
+    }
+    spinner?.fail(`Toggle failed for ${slug}`);
     console.error(result.error.message);
     process.exit(1);
   }
-  spinner.succeed(`${slug} is now ${active ? 'active' : 'inactive'}`);
+  if (options.json) {
+    jsonOutput({ success: true, slug, active });
+  }
+  spinner?.succeed(`${slug} is now ${active ? 'active' : 'inactive'}`);
 }

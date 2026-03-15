@@ -6,6 +6,7 @@ import {
   green,
   header,
   inactive,
+  jsonOutput,
   muted,
   orange,
   renderTable,
@@ -26,7 +27,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   code: 'Edge functions and GC Hooks',
 };
 
-export async function servicesList(options: { profile?: string } = {}) {
+export async function servicesList(options: { profile?: string; json?: boolean } = {}) {
   const profileName = options.profile ?? config.getActiveProfile() ?? 'default';
   const profile = config.getProfile(profileName);
   let serviceStatuses: ManageProjectServices = {};
@@ -40,6 +41,15 @@ export async function servicesList(options: { profile?: string } = {}) {
     } catch {
       serviceStatuses = {};
     }
+  }
+
+  if (options.json) {
+    jsonOutput(
+      Object.keys(SERVICE_DESCRIPTIONS).map((service) => ({
+        service,
+        enabled: serviceStatuses[service] ?? false,
+      }))
+    );
   }
 
   const rows = Object.entries(SERVICE_DESCRIPTIONS).map(([slug, desc]) => {

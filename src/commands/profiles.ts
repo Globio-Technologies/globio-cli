@@ -3,6 +3,7 @@ import {
   green,
   header,
   inactive,
+  jsonOutput,
   muted,
   orange,
   renderTable,
@@ -13,9 +14,23 @@ import { config } from '../lib/config.js';
 
 const version = getCliVersion();
 
-export async function profilesList() {
+export async function profilesList(options: { json?: boolean } = {}) {
   const profiles = config.listProfiles();
   const active = config.getActiveProfile();
+  const wantsJson = options.json ?? process.argv.includes('--json');
+
+  if (wantsJson) {
+    jsonOutput(
+      profiles.map((name) => {
+        const profile = config.getProfile(name);
+        return {
+          name,
+          email: profile?.account_email ?? null,
+          active: name === active,
+        };
+      })
+    );
+  }
 
   if (!profiles.length) {
     console.log(

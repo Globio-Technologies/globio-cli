@@ -4,6 +4,7 @@ import {
   getCliVersion,
   header,
   inactive,
+  jsonOutput,
   muted,
   orange,
   renderTable,
@@ -14,11 +15,24 @@ import {
 
 const version = getCliVersion();
 
-export async function whoami(options: { profile?: string } = {}) {
+export async function whoami(options: { profile?: string; json?: boolean } = {}) {
   const profileName = options.profile ?? config.getActiveProfile() ?? 'default';
   const profile = config.getProfile(profileName);
+  const active = config.getActiveProfile();
 
   if (!profile) {
+    if (options.json) {
+      jsonOutput({
+        profile: profileName,
+        active: false,
+        account_email: null,
+        account_name: null,
+        org_name: null,
+        active_project_id: null,
+        active_project_name: null,
+      });
+    }
+
     console.log(
       header(version) +
         '  ' +
@@ -29,8 +43,19 @@ export async function whoami(options: { profile?: string } = {}) {
     return;
   }
 
+  if (options.json) {
+    jsonOutput({
+      profile: profileName,
+      active: profileName === active,
+      account_email: profile.account_email,
+      account_name: profile.account_name,
+      org_name: profile.org_name ?? null,
+      active_project_id: profile.active_project_id ?? null,
+      active_project_name: profile.active_project_name ?? null,
+    });
+  }
+
   const allProfiles = config.listProfiles();
-  const active = config.getActiveProfile();
   const otherProfiles = allProfiles.filter((p) => p !== profileName).join(', ') || '—';
 
   console.log(
