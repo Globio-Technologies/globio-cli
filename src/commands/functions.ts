@@ -1,10 +1,21 @@
-import chalk from 'chalk';
 import type { CodeFunction, CodeInvocation } from '@globio/sdk';
 import ora from 'ora';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { config } from '../lib/config.js';
-import { gold, muted, orange } from '../lib/banner.js';
+import {
+  failure,
+  getCliVersion,
+  green,
+  header,
+  inactive,
+  muted,
+  orange,
+  gold,
+  renderTable,
+} from '../lib/banner.js';
 import { getClient } from '../lib/sdk.js';
+
+const version = getCliVersion();
 
 function resolveProfileName(profile?: string) {
   return profile ?? config.getActiveProfile() ?? 'default';
@@ -13,32 +24,39 @@ function resolveProfileName(profile?: string) {
 export async function functionsList(options: { profile?: string } = {}) {
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
-  const spinner = ora('Fetching functions...').start();
   const result = await client.code.listFunctions();
-  spinner.stop();
 
   if (!result.success || !result.data.length) {
-    console.log(chalk.gray('No functions found.'));
+    console.log(header(version) + '  ' + muted('No functions found.') + '\n');
     return;
   }
 
-  console.log('');
-  result.data.forEach((fn: CodeFunction) => {
-    const status = fn.active ? '\x1b[32m●\x1b[0m' : '\x1b[2m○\x1b[0m';
-    const type =
-      fn.type === 'hook' ? gold('[hook]') : orange('[function]');
-    console.log('  ' + status + '  ' + type + '  ' + fn.slug);
-    if (fn.type === 'hook' && fn.trigger_event) {
-      console.log(muted('           trigger: ' + fn.trigger_event));
-    }
-  });
+  const rows = result.data.map((fn: CodeFunction) => [
+    fn.type === 'hook' ? gold(fn.slug) : orange(fn.slug),
+    fn.type === 'hook' ? gold('hook') : orange('function'),
+    fn.type === 'hook' && fn.trigger_event ? gold(fn.trigger_event) : muted('http'),
+    fn.active ? green('active') : inactive('inactive'),
+  ]);
+
+  console.log(header(version));
+  console.log(
+    renderTable({
+      columns: [
+        { header: 'Function', width: 24 },
+        { header: 'Type', width: 10 },
+        { header: 'Trigger', width: 20 },
+        { header: 'Status', width: 10 },
+      ],
+      rows,
+    })
+  );
   console.log('');
 }
 
 export async function functionsCreate(slug: string, _options: { profile?: string } = {}) {
   const filename = `${slug}.js`;
   if (existsSync(filename)) {
-    console.log(chalk.yellow(`${filename} already exists.`));
+    console.log(inactive(`${filename} already exists.`));
     return;
   }
 
@@ -58,10 +76,8 @@ async function handler(input, globio) {
 }
 `;
   writeFileSync(filename, template);
-  console.log(chalk.green(`Created ${filename}`));
-  console.log(
-    chalk.gray(`Deploy with: npx @globio/cli functions deploy ${slug}`)
-  );
+  console.log(green(`Created ${filename}`));
+  console.log(muted(`Deploy with: npx @globio/cli functions deploy ${slug}`));
 }
 
 export async function functionsDeploy(
@@ -71,7 +87,7 @@ export async function functionsDeploy(
   const filename = options.file ?? `${slug}.js`;
   if (!existsSync(filename)) {
     console.log(
-      chalk.red(
+      failure(
         `File not found: ${filename}. Create it with: npx @globio/cli functions create ${slug}`
       )
     );
@@ -117,7 +133,7 @@ export async function functionsInvoke(
     try {
       input = JSON.parse(options.input) as Record<string, unknown>;
     } catch {
-      console.error(chalk.red('--input must be valid JSON'));
+      console.error(failure('--input must be valid JSON'));
       process.exit(1);
     }
   }
@@ -129,7 +145,7 @@ export async function functionsInvoke(
   spinner.stop();
 
   if (!result.success) {
-    console.log(chalk.red('Invocation failed'));
+    console.log(failure('Invocation failed'));
     console.error(result.error.message);
     return;
   }
@@ -147,28 +163,38 @@ export async function functionsLogs(
   const limit = options.limit ? parseInt(options.limit, 10) : 20;
   const profileName = resolveProfileName(options.profile);
   const client = getClient(profileName);
-  const spinner = ora('Fetching invocations...').start();
   const result = await client.code.getInvocations(slug, limit);
-  spinner.stop();
 
   if (!result.success || !result.data.length) {
-    console.log(chalk.gray('No invocations yet.'));
+    console.log(header(version) + '  ' + muted('No invocations yet.') + '\n');
     return;
   }
 
-  console.log('');
-  result.data.forEach((inv: CodeInvocation) => {
-    const status = inv.success
-      ? '\x1b[38;2;244;140;6m✓\x1b[0m'
-      : '\x1b[31m✗\x1b[0m';
+  const rows = result.data.map((inv: CodeInvocation) => {
     const date = new Date(inv.invoked_at * 1000)
       .toISOString()
       .replace('T', ' ')
       .slice(0, 19);
-    console.log(
-      `  ${status}  ${chalk.gray(date)}  ${inv.duration_ms}ms  ${chalk.gray(`[${inv.trigger_type}]`)}`
-    );
+    return [
+      muted(date),
+      muted(inv.trigger_type),
+      muted(inv.duration_ms + 'ms'),
+      inv.success ? green('success') : failure('failed'),
+    ];
   });
+
+  console.log(header(version));
+  console.log(
+    renderTable({
+      columns: [
+        { header: 'Time', width: 21 },
+        { header: 'Trigger', width: 9 },
+        { header: 'Duration', width: 10 },
+        { header: 'Status', width: 10 },
+      ],
+      rows,
+    })
+  );
   console.log('');
 }
 

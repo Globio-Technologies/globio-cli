@@ -1,12 +1,28 @@
 import * as p from '@clack/prompts';
-import chalk from 'chalk';
 import { config } from '../lib/config.js';
 import {
   manageRequest,
   type ManageOrg,
   type ManageProject,
   type ManageProjectKey,
+  type ManageProjectServices,
 } from '../lib/manage.js';
+import {
+  footer,
+  getCliVersion,
+  gold,
+  green,
+  header,
+  inactive,
+  muted,
+  orange,
+  renderTable,
+  reset,
+  white,
+  failure,
+} from '../lib/banner.js';
+
+const version = getCliVersion();
 
 function slugify(value: string) {
   return value
@@ -44,30 +60,36 @@ export async function projectsList(options: { profile?: string } = {}) {
 
   const projects = await manageRequest<ManageProject[]>('/projects', { profileName });
   const activeProjectId = config.getProfile(profileName)?.active_project_id;
-  const grouped = new Map<string, ManageProject[]>();
 
-  for (const project of projects) {
-    const list = grouped.get(project.org_name) ?? [];
-    list.push(project);
-    grouped.set(project.org_name, list);
-  }
-
-  console.log('');
   if (!projects.length) {
-    console.log(chalk.gray('No projects found.'));
-    console.log('');
+    console.log(header(version) + '  ' + muted('No projects found.') + '\n');
     return;
   }
 
-  for (const [orgName, orgProjects] of grouped.entries()) {
-    console.log(chalk.cyan(`org: ${orgName}`));
-    for (const project of orgProjects) {
-      const marker = project.id === activeProjectId ? chalk.green('●') : chalk.gray('○');
-      const active = project.id === activeProjectId ? chalk.green('  (active)') : '';
-      console.log(`  ${marker} ${project.slug.padEnd(22)} ${chalk.gray(project.id)}${active}`);
-    }
-    console.log('');
-  }
+  const rows = projects.map((project) => [
+    activeProjectId === project.id
+      ? gold(project.name) + reset + ' ' + orange('●') + reset
+      : white(project.name),
+    muted(project.id),
+    muted(project.org_name || project.org_id),
+    inactive(project.environment?.slice(0, 4) ?? 'dev'),
+  ]);
+
+  console.log(header(version));
+  console.log(
+    renderTable({
+      columns: [
+        { header: 'Project', width: 24 },
+        { header: 'ID', width: 26 },
+        { header: 'Org', width: 16 },
+        { header: 'Env', width: 6 },
+      ],
+      rows,
+    })
+  );
+  console.log(
+    footer('● active project · run globio projects use <id> to switch')
+  );
 }
 
 export async function projectsUse(projectId: string, options: { profile?: string } = {}) {
@@ -77,7 +99,7 @@ export async function projectsUse(projectId: string, options: { profile?: string
   const projects = await manageRequest<ManageProject[]>('/projects', { profileName });
   const project = projects.find((item) => item.id === projectId);
   if (!project) {
-    console.log(chalk.red(`Project not found: ${projectId}`));
+    console.log(failure(`Project not found: ${projectId}`));
     process.exit(1);
   }
 
@@ -87,13 +109,12 @@ export async function projectsUse(projectId: string, options: { profile?: string
   config.setProfile(profileName, {
     active_project_id: project.id,
     active_project_name: project.name,
+    org_name: project.org_name,
     project_api_key: apiKey,
   });
   config.setActiveProfile(profileName);
 
-  console.log(
-    chalk.green('Active project set to: ') + chalk.cyan(`${project.name} (${project.id})`)
-  );
+  console.log(green('Active project: ') + `${project.name} (${project.id})`);
 }
 
 export async function projectsCreate(options: { profile?: string } = {}) {
@@ -102,7 +123,7 @@ export async function projectsCreate(options: { profile?: string } = {}) {
 
   const orgs = await manageRequest<ManageOrg[]>('/orgs', { profileName });
   if (!orgs.length) {
-    console.log(chalk.red('No organizations found. Create one in the console first.'));
+    console.log(failure('No organizations found. Create one in the console first.'));
     process.exit(1);
   }
 
@@ -168,14 +189,15 @@ export async function projectsCreate(options: { profile?: string } = {}) {
   config.setProfile(profileName, {
     active_project_id: result.project.id,
     active_project_name: result.project.name,
+    org_name: orgs.find((org) => org.id === orgId)?.name,
     project_api_key: result.keys.server,
   });
   config.setActiveProfile(profileName);
 
   console.log('');
-  console.log(chalk.green('Project created successfully.'));
-  console.log(chalk.cyan('Project: ') + `${result.project.name} (${result.project.id})`);
-  console.log(chalk.cyan('Client key: ') + result.keys.client);
-  console.log(chalk.cyan('Server key: ') + result.keys.server);
+  console.log(green('Project created successfully.'));
+  console.log(orange('Project: ') + reset + `${result.project.name} (${result.project.id})`);
+  console.log(orange('Client key: ') + reset + result.keys.client);
+  console.log(orange('Server key: ') + reset + result.keys.server);
   console.log('');
 }

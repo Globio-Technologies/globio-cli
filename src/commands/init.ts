@@ -2,6 +2,7 @@ import * as p from '@clack/prompts';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { config } from '../lib/config.js';
 import {
+  failure,
   getCliVersion,
   muted,
   orange,
@@ -21,7 +22,7 @@ export async function init(options: { profile?: string } = {}) {
   const profileName = options.profile ?? config.getActiveProfile() ?? 'default';
   const profile = config.getProfile(profileName);
   if (!profile) {
-    console.log('Run: npx @globio/cli login --profile ' + profileName);
+    console.log(failure('Run: npx @globio/cli login --profile ' + profileName));
     process.exit(1);
   }
 
@@ -37,7 +38,7 @@ export async function init(options: { profile?: string } = {}) {
   const { projectId: activeProjectId } = config.requireProject(profileName);
 
   if (!activeProjectKey) {
-    console.log('No project API key cached. Run: npx @globio/cli projects use ' + activeProjectId);
+    console.log(failure('No project API key cached. Run: npx @globio/cli projects use ' + activeProjectId));
     process.exit(1);
   }
 

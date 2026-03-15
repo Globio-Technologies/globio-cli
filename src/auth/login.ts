@@ -1,9 +1,8 @@
 import * as p from '@clack/prompts';
 import { exec } from 'child_process';
-import chalk from 'chalk';
 import { config } from '../lib/config.js';
 import { getConsoleCliAuthUrl, manageRequest, type ManageAccount } from '../lib/manage.js';
-import { getCliVersion, muted, orange, printBanner } from '../lib/banner.js';
+import { failure, getCliVersion, muted, orange, printBanner, white } from '../lib/banner.js';
 
 const version = getCliVersion();
 
@@ -37,11 +36,11 @@ function warnOnDuplicateAccount(accountEmail: string, targetProfileName: string)
 
   console.log('');
   console.log(
-    chalk.yellow('  ⚠  ') +
-      chalk.white(accountEmail) +
-      chalk.gray(' is already logged in under profile ') +
+    failure('  ⚠  ') +
+      white(accountEmail) +
+      '\x1b[2m is already logged in under profile \x1b[0m' +
       orange(`"${duplicate}"`) +
-      chalk.gray('.')
+      '\x1b[2m.\x1b[0m'
   );
   console.log('');
 }
@@ -81,7 +80,7 @@ async function runTokenLogin(profileName: string) {
     p.outro(`Logged in as ${account.email}\nProfile: ${profileName}`);
   } catch (error) {
     spinner.stop('Validation failed.');
-    p.outro(chalk.red(error instanceof Error ? error.message : 'Could not validate token'));
+    p.outro(failure(error instanceof Error ? error.message : 'Could not validate token') + '\x1b[0m');
     process.exit(1);
   }
 }
@@ -112,7 +111,7 @@ async function runBrowserLogin(profileName: string) {
 
       if (status.status === 'expired') {
         spinner.stop('Approval window expired.');
-        p.outro(chalk.red('CLI auth request expired. Try again or use globio login --token.'));
+        p.outro(failure('CLI auth request expired. Try again or use globio login --token.') + '\x1b[0m');
         process.exit(1);
       }
 
@@ -148,7 +147,7 @@ async function runBrowserLogin(profileName: string) {
   }
 
   spinner.stop('Approval timed out.');
-  p.outro(chalk.red('Timed out waiting for browser approval. Try again or use globio login --token.'));
+  p.outro(failure('Timed out waiting for browser approval. Try again or use globio login --token.') + '\x1b[0m');
   process.exit(1);
 }
 
@@ -195,7 +194,7 @@ export async function login(options: { token?: boolean; profile?: string } = {})
   try {
     await runBrowserLogin(profileName);
   } catch (error) {
-    p.outro(chalk.red(error instanceof Error ? error.message : 'Could not connect to Globio.'));
+    p.outro(failure(error instanceof Error ? error.message : 'Could not connect to Globio.') + '\x1b[0m');
     process.exit(1);
   }
 }

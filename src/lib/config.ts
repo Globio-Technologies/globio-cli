@@ -11,6 +11,7 @@ export interface ProfileData {
   pat: string;
   account_email: string;
   account_name: string;
+  org_name?: string;
   active_project_id?: string;
   active_project_name?: string;
   project_api_key?: string;
@@ -88,6 +89,7 @@ export const config = {
       pat: data.pat ?? existing?.pat ?? '',
       account_email: data.account_email ?? existing?.account_email ?? '',
       account_name: data.account_name ?? existing?.account_name ?? '',
+      org_name: data.org_name ?? existing?.org_name,
       active_project_id: data.active_project_id ?? existing?.active_project_id,
       active_project_name: data.active_project_name ?? existing?.active_project_name,
       project_api_key: data.project_api_key ?? existing?.project_api_key,

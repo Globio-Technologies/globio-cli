@@ -1,26 +1,53 @@
-import chalk from 'chalk';
-import { orange, muted } from '../lib/banner.js';
+import {
+  getCliVersion,
+  green,
+  header,
+  inactive,
+  muted,
+  orange,
+  renderTable,
+  reset,
+  white,
+} from '../lib/banner.js';
 import { config } from '../lib/config.js';
+
+const version = getCliVersion();
 
 export async function profilesList() {
   const profiles = config.listProfiles();
   const active = config.getActiveProfile();
 
   if (!profiles.length) {
-    console.log(chalk.gray('No profiles found. Run: globio login'));
+    console.log(
+      header(version) + '  ' + muted('No profiles. Run: globio login') + '\n'
+    );
     return;
   }
 
-  console.log('');
-  for (const name of profiles) {
-    const data = config.getProfile(name);
+  const rows = profiles.map((name) => {
+    const p = config.getProfile(name);
     const isActive = name === active;
-    const bullet = isActive ? orange('●') : chalk.gray('○');
-    const label = isActive ? orange(name) : chalk.white(name);
-    const email = data?.account_email ? muted(data.account_email) : chalk.gray('unknown');
-    const tag = isActive ? muted(' (active)') : '';
+    return [
+      isActive ? orange(name) : inactive(name),
+      p?.account_email
+        ? isActive
+          ? white(p.account_email)
+          : muted(p.account_email)
+        : inactive('—'),
+      isActive ? green('active') : inactive('—'),
+    ];
+  });
 
-    console.log(`  ${bullet}  ${label}   ${email}${tag}`);
-  }
+  console.log(header(version));
+  console.log(
+    renderTable({
+      columns: [
+        { header: 'Profile', width: 16 },
+        { header: 'Account', width: 36 },
+        { header: 'Status', width: 10 },
+      ],
+      rows,
+    })
+  );
   console.log('');
 }

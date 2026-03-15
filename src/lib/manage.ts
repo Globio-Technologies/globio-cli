@@ -36,6 +36,10 @@ export interface ManageProject {
   active: boolean;
 }
 
+export interface ManageProjectServices {
+  [key: string]: boolean;
+}
+
 export interface ManageProjectKey {
   id: string;
   name: string;

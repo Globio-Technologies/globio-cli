@@ -1,9 +1,10 @@
 import * as p from '@clack/prompts';
-import chalk from 'chalk';
 import { basename } from 'path';
 import {
+  failure,
   getCliVersion,
   gold,
+  green,
   muted,
   orange,
   printBanner,
@@ -47,14 +48,14 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
     const snapshot = await firestore.listCollections();
     collections = snapshot.map((collection) => collection.id);
     console.log(
-      chalk.cyan(
+      green(
         `Found ${collections.length} collections: ${collections.join(', ')}`
       )
     );
   } else if (options.collection) {
     collections = [options.collection];
   } else {
-    console.log(chalk.red('Specify --collection <name> or --all'));
+    console.log(failure('Specify --collection <name> or --all'));
     process.exit(1);
   }
 
@@ -128,17 +129,17 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
     bar.stop();
 
     console.log(
-      chalk.green(`  ✓ ${results[collectionId].success} documents migrated`)
+      green(`  ✓ ${results[collectionId].success} documents migrated`)
     );
     if (indexFieldCount > 0) {
       console.log(
-        chalk.gray(`  Indexes created for ${indexFieldCount} fields`)
+        muted(`  Indexes created for ${indexFieldCount} fields`)
       );
     }
     if (results[collectionId].failed > 0) {
-      console.log(chalk.red(`  ✗ ${results[collectionId].failed} failed`));
+      console.log(failure(`  ✗ ${results[collectionId].failed} failed`) + '\x1b[0m');
       console.log(
-        chalk.gray(
+        muted(
           '  Failed IDs: ' +
             results[collectionId].failedIds.slice(0, 10).join(', ') +
             (results[collectionId].failedIds.length > 10 ? '...' : '')
@@ -177,7 +178,7 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
 
   const [files] = await bucket.getFiles(prefix ? { prefix } : {});
 
-  console.log(chalk.cyan(`Found ${files.length} files to migrate`));
+  console.log(green(`Found ${files.length} files to migrate`));
 
   const bar = createProgressBar('Storage');
   bar.start(files.length, 0);
@@ -222,9 +223,9 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
   bar.stop();
 
   console.log('');
-  console.log(chalk.green(`  ✓ ${success} files migrated`));
+  console.log(green(`  ✓ ${success} files migrated`));
   if (failed > 0) {
-    console.log(chalk.red(`  ✗ ${failed} failed`));
+    console.log(failure(`  ✗ ${failed} failed`) + '\x1b[0m');
   }
 
   p.outro(

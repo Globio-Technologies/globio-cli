@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import figlet from 'figlet';
 import gradientString from 'gradient-string';
+export * from './table.js';
 
 const globioGradient = gradientString(
   '#e85d04',
@@ -38,12 +39,6 @@ export function printError(message: string) {
 export function printInfo(message: string) {
   console.log('\x1b[2m›\x1b[0m  ' + message);
 }
-
-export const orange = (s: string) => '\x1b[38;2;244;140;6m' + s + '\x1b[0m';
-
-export const gold = (s: string) => '\x1b[38;2;255;208;0m' + s + '\x1b[0m';
-
-export const muted = (s: string) => '\x1b[2m' + s + '\x1b[0m';
 
 export function getCliVersion() {
   const file = readFileSync(new URL('../package.json', import.meta.url), 'utf8');
