@@ -8,9 +8,9 @@ import {
   orange,
   printBanner,
 } from '../lib/banner.js';
+import { docSet } from '../lib/api.js';
 import { initFirebase } from '../lib/firebase.js';
 import { createProgressBar } from '../lib/progress.js';
-import { getClient } from '../lib/sdk.js';
 import { config } from '../lib/config.js';
 
 const version = getCliVersion();
@@ -39,7 +39,7 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
   p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
 
   const { firestore } = await initFirebase(options.from);
-  const client = getClient(resolveProfileName(options.profile));
+  const profileName = resolveProfileName(options.profile);
 
   let collections: string[] = [];
 
@@ -96,10 +96,7 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
 
       for (const doc of snapshot.docs) {
         try {
-          const result = await client.doc.set(collectionId, doc.id, doc.data());
-          if (!result.success) {
-            throw new Error(result.error.message);
-          }
+          await docSet(collectionId, doc.id, doc.data(), profileName);
           results[collectionId].success++;
         } catch {
           results[collectionId].failed++;
@@ -146,7 +143,12 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
   p.intro(gold('⇒⇒') + '  Firebase → Globio Migration');
 
   const { storage } = await initFirebase(options.from);
-  const client = getClient(resolveProfileName(options.profile));
+  const profileName = resolveProfileName(options.profile);
+  const profile = config.getProfile(profileName);
+
+  if (!profile?.project_api_key) {
+    throw new Error('No active project. Run: globio projects use <id>');
+  }
 
   const bucketName = options.bucket.replace(/^gs:\/\//, '');
   const bucket = storage.bucket(bucketName);
@@ -165,18 +167,28 @@ export async function migrateFirebaseStorage(options: MigrateStorageOptions) {
   for (const file of files) {
     try {
       const [buffer] = await file.download();
-      const uploadFile = new File(
-        [new Uint8Array(buffer)],
+      const bytes = Uint8Array.from(buffer);
+      const formData = new FormData();
+      formData.append(
+        'file',
+        new Blob([bytes]),
         basename(file.name) || file.name
       );
-      const result = await client.vault.uploadFile(uploadFile, {
-        metadata: {
-          original_path: file.name,
-        },
-      });
+      formData.append('path', file.name);
 
-      if (!result.success) {
-        throw new Error(result.error.message);
+      const res = await fetch(
+        'https://api.globio.stanlink.online/vault/files',
+        {
+          method: 'POST',
+          headers: {
+            'X-Globio-Key': profile.project_api_key,
+          },
+          body: formData,
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error(`Upload failed: ${res.status}`);
       }
 
       success++;
