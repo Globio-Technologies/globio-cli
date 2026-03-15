@@ -17,6 +17,7 @@ import {
   functionsDelete,
   functionsToggle,
 } from './commands/functions.js';
+import { functionsWatch } from './commands/watch.js';
 import {
   migrateFirestore,
   migrateFirebaseStorage,
@@ -106,6 +107,11 @@ functions
   .option('-l, --limit <n>', 'Number of entries', '20')
   .option('--profile <name>', 'Use a specific profile')
   .action(functionsLogs);
+functions
+  .command('watch <slug>')
+  .description('Stream live function execution logs')
+  .option('--profile <name>', 'Use a specific profile')
+  .action(functionsWatch);
 functions.command('delete <slug>').description('Delete a function').option('--profile <name>', 'Use a specific profile').action(functionsDelete);
 functions
   .command('enable <slug>')
