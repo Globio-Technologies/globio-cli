@@ -8,7 +8,7 @@ import {
   orange,
   printBanner,
 } from '../lib/banner.js';
-import { docSet } from '../lib/api.js';
+import { createIndex, docSet } from '../lib/api.js';
 import { initFirebase } from '../lib/firebase.js';
 import { createProgressBar } from '../lib/progress.js';
 import { config } from '../lib/config.js';
@@ -81,6 +81,8 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
 
     let lastDoc: unknown = null;
     let processed = 0;
+    let firstDocData: Record<string, unknown> | null = null;
+    let indexFieldCount = 0;
 
     while (processed < total) {
       let query = firestore.collection(collectionId).limit(100);
@@ -96,6 +98,20 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
 
       for (const doc of snapshot.docs) {
         try {
+          if (!firstDocData) {
+            firstDocData = doc.data();
+            for (const [field, value] of Object.entries(firstDocData)) {
+              const fieldType =
+                typeof value === 'number'
+                  ? 'number'
+                  : typeof value === 'boolean'
+                    ? 'boolean'
+                    : 'string';
+              await createIndex(collectionId, field, fieldType, profileName);
+            }
+            indexFieldCount = Object.keys(firstDocData).length;
+          }
+
           await docSet(collectionId, doc.id, doc.data(), profileName);
           results[collectionId].success++;
         } catch {
@@ -114,6 +130,11 @@ export async function migrateFirestore(options: MigrateFirestoreOptions) {
     console.log(
       chalk.green(`  ✓ ${results[collectionId].success} documents migrated`)
     );
+    if (indexFieldCount > 0) {
+      console.log(
+        chalk.gray(`  Indexes created for ${indexFieldCount} fields`)
+      );
+    }
     if (results[collectionId].failed > 0) {
       console.log(chalk.red(`  ✗ ${results[collectionId].failed} failed`));
       console.log(

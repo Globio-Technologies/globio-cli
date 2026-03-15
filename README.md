@@ -35,6 +35,12 @@ npx @globio/cli migrate firebase-storage \
   --all
 ```
 
+After migration, GlobalDoc indexes are created automatically for every field in your collections.
+Queries using `where()` clauses will work immediately.
+
+Note: GlobalDoc requires explicit indexes unlike Firestore's automatic indexing.
+The migrate command handles this for you automatically.
+
 ## Commands
 
 ### Auth

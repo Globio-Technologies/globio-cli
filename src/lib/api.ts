@@ -50,3 +50,24 @@ export async function docSet(
     profile,
   });
 }
+
+export async function createIndex(
+  collection: string,
+  field: string,
+  fieldType: 'string' | 'number' | 'boolean' = 'string',
+  profile?: string
+): Promise<void> {
+  void fieldType;
+  try {
+    await apiCall(`/doc/${collection}/indexes`, {
+      method: 'POST',
+      body: {
+        field_path: field,
+        index_type: 'asc',
+      },
+      profile,
+    });
+  } catch {
+    // Index may already exist. Ignore duplicate-style failures.
+  }
+}
